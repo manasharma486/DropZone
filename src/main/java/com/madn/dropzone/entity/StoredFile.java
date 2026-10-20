@@ -8,6 +8,7 @@ import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -56,6 +57,10 @@ public class StoredFile {
     @Column(name = "content_type", nullable = false, length = 150)
     private String contentType;
 
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "storage_account_id", nullable = false)
+    private StorageAccount storageAccount;
+
     @NotBlank
     @Size(max = 255)
     @Column(name = "storage_key", nullable = false, length = 255)
@@ -64,6 +69,10 @@ public class StoredFile {
     @Size(max = 64)
     @Column(name = "checksum", length = 64)
     private String checksum;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "folder_reference", nullable = true)
+    private StoredFolder folder;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)

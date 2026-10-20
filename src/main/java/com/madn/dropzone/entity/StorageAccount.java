@@ -36,10 +36,16 @@ public class StorageAccount {
     private Long quotaBytes = 1073741824L; // 1 GiB
 
     @OneToMany(
+            mappedBy = "storageAccount",
             cascade = {CascadeType.PERSIST, CascadeType.MERGE}
     )
-    @JoinColumn(name = "storage_account_id", nullable = false)
     private List<StoredFile> files = new ArrayList<>();
+
+    @OneToMany(
+            mappedBy = "storageAccount",
+            cascade = {CascadeType.PERSIST, CascadeType.MERGE}
+    )
+    private List<StoredFolder> folders = new ArrayList<>();
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
