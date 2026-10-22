@@ -20,8 +20,10 @@ public interface FileRepository extends JpaRepository<StoredFile , UUID> {
     AND f.status = :status
     ORDER BY f.uploadedAt desc
 """)
-    List<StoredFile> getStoredFileInBin(
+    List<StoredFile> getStoredFileFromStatus(
             @Param("userId") UUID userId,
             @Param("status") FileStatus status
     );
+
+    void removeAllByStatus_Deleted();
 }

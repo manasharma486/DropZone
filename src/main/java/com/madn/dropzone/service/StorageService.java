@@ -1,4 +1,5 @@
 package com.madn.dropzone.service;
+import com.madn.dropzone.entity.StoredFile;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -87,6 +88,21 @@ public class StorageService {
             throw new RuntimeException("Failed to calculate file checksum", e);
         } catch (Exception e) {
             throw new RuntimeException("Unexpected error calculating checksum", e);
+        }
+    }
+
+    public void deleteFromStorage(String storageKey) {
+        try {
+            Path filePath = storageDestination.resolve(storageKey).normalize();
+
+            if (!filePath.startsWith(storageDestination.normalize())) {
+                throw new SecurityException("Invalid storage key");
+            }
+
+            Files.deleteIfExists(filePath);
+
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to delete file from storage", e);
         }
     }
 }

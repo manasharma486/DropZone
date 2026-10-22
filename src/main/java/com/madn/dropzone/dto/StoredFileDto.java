@@ -15,7 +15,7 @@ import java.time.LocalDateTime;
 public class StoredFileDto {
 
     private String fileName;
-    private String fileSize;
+    private Long fileSize;
     private String contentType;
     private LocalDateTime uploaded_at;
     private FileStatus status;

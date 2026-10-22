@@ -34,6 +34,13 @@ public class UserController {
         return ResponseEntity.ok(storedFileDtoList);
     }
 
+    @DeleteMapping("/bin/empty")
+    public ResponseEntity<String> emptyBin(@RequestParam("userid") UUID userid) {
+        String s = service.emptyBin(userid);
+
+        return ResponseEntity.ok(s);
+    }
+
     @GetMapping("/drive")
     public ResponseEntity<List<StoredFileDto>> getFiles(@RequestParam("userid") UUID userid) {
         List<StoredFileDto> storedFileDtoList = service.getFilesInDrive(userid);
