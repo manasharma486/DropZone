@@ -8,7 +8,6 @@ import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -24,12 +23,6 @@ import java.util.UUID;
                 @Index(
                         name = "idx_stored_files_status",
                         columnList = "status"
-                )
-        },
-        uniqueConstraints = {
-                @UniqueConstraint(
-                        name = "uk_stored_files_storage_key",
-                        columnNames = "storage_key"
                 )
         }
 )
@@ -71,7 +64,7 @@ public class StoredFile {
     private String checksum;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "folder_reference", nullable = true)
+    @JoinColumn(name = "folder_reference")
     private StoredFolder folder;
 
     @Enumerated(EnumType.STRING)

@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Getter
 @Setter
@@ -14,8 +15,9 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 public class StoredFileDto {
 
+    private UUID fileId;
     private String fileName;
-    private Long fileSize;
+    private String fileSize;
     private String contentType;
     private LocalDateTime uploaded_at;
     private FileStatus status;

@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.UUID;
+import static com.madn.dropzone.mapper.FileMapper.fileToFileDto;
 
 @Service
 public class UserService {
@@ -21,9 +22,11 @@ public class UserService {
     private StorageAccountRepository storageAccountRepository;
     private StorageService storageService;
 
-    public UserService(UserRepository userRepository , FileRepository fileRepository) {
+    public UserService(UserRepository userRepository , FileRepository fileRepository , StorageAccountRepository accountRepository , StorageService storageService) {
         this.userRepository = userRepository;
         this.fileRepository = fileRepository;
+        this.storageAccountRepository = accountRepository;
+        this.storageService = storageService;
     }
 
 
@@ -70,19 +73,6 @@ public class UserService {
     }
 
 
-    private StoredFileDto fileToFileDto(StoredFile file) {
-        StoredFileDto fileDto = new StoredFileDto();
-
-        fileDto.setFileName(file.getFileName());
-        fileDto.setFileSize(file.getFileSize());
-        fileDto.setStatus(file.getStatus());
-        fileDto.setContentType(file.getContentType());
-        fileDto.setUploaded_at(file.getUploadedAt());
-
-        return fileDto;
-
-    }
-
     public String emptyBin(UUID userid) {
         StorageAccount account = storageAccountRepository.
                 findByUserId(userid).orElseThrow(()-> new RuntimeException("User Does Not Exists"));
@@ -91,12 +81,22 @@ public class UserService {
 
 
         for (StoredFile file : fileList) {
-            account.setUsedBytes(account.getUsedBytes() - file.getFileSize());
+            long newUsedBytes = account.getUsedBytes() - file.getFileSize();
+
+            System.out.println("Used bytes: " + account.getUsedBytes());
+            System.out.println("File size: " + file.getFileSize());
+            System.out.println("File ID: " + file.getId());
+
+            if (newUsedBytes < 0) {
+                throw new IllegalStateException("Storage usage cannot be negative");
+            }
+
+            account.setUsedBytes(newUsedBytes);
             storageService.deleteFromStorage(file.getStorageKey());
         }
 
         storageAccountRepository.save(account);
-        fileRepository.removeAllByStatus_Deleted();
+        fileRepository.removeAllByStatus(FileStatus.DELETED , userid);
 
         return "Deletion Successfull !!";
     }

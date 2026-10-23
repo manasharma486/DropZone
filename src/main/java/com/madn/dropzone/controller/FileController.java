@@ -29,7 +29,7 @@ public class FileController {
         return ResponseEntity.ok(s);
     }
 
-    @DeleteMapping("/{id}")
+    @DeleteMapping()
     public ResponseEntity<String> deleteFile(@RequestParam("fileid") UUID fileid , @RequestParam("userid") UUID userid) {
         String s = fileService.deleteFile(fileid , userid);
 
