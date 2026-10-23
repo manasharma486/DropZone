@@ -1,0 +1,14 @@
+$kind: http-request
+description: ""
+url: http://localhost:8080/api/files?fileid=b0ae5b95-b229-42f4-81d2-a29afd230aea&userid=981aef3e-b841-414f-8145-a636477b8371
+method: DELETE
+queryParams:
+  - key: fileid
+    value: b0ae5b95-b229-42f4-81d2-a29afd230aea
+    disabled: false
+    description: ""
+  - key: userid
+    value: 981aef3e-b841-414f-8145-a636477b8371
+    disabled: false
+    description: ""
+order: 4000

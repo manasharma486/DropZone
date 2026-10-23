@@ -1,0 +1,15 @@
+$kind: http-request
+description: ""
+url: http://localhost:8080/api/bin/restore?userid=981aef3e-b841-414f-8145-a636477b8371
+method: POST
+queryParams:
+  userid: 981aef3e-b841-414f-8145-a636477b8371
+body:
+  type: json
+  content: |-
+    {
+        "fileIDs": [
+            "b0ae5b95-b229-42f4-81d2-a29afd230aea"
+        ]
+    }
+order: 6000

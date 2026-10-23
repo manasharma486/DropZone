@@ -1,0 +1,10 @@
+$kind: http-request
+description: ""
+url: http://localhost:8080/api/bin/empty-all?userid=330f9e48-c56c-4c4d-b565-c7132ec184bd
+method: DELETE
+queryParams:
+  - key: userid
+    value: 330f9e48-c56c-4c4d-b565-c7132ec184bd
+    disabled: false
+    description: ""
+order: 8000

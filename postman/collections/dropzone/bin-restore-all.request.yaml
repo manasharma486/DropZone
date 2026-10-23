@@ -1,0 +1,10 @@
+$kind: http-request
+description: ""
+url: http://localhost:8080/api/bin/restore-all?userid=981aef3e-b841-414f-8145-a636477b8371
+method: POST
+queryParams:
+  userid: 981aef3e-b841-414f-8145-a636477b8371
+body:
+  type: json
+  content: ""
+order: 7000

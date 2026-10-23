@@ -19,14 +19,10 @@ import static com.madn.dropzone.mapper.FileMapper.fileToFileDto;
 public class UserService {
     private UserRepository userRepository;
     private FileRepository fileRepository;
-    private StorageAccountRepository storageAccountRepository;
-    private StorageService storageService;
 
-    public UserService(UserRepository userRepository , FileRepository fileRepository , StorageAccountRepository accountRepository , StorageService storageService) {
+    public UserService(UserRepository userRepository , FileRepository fileRepository) {
         this.userRepository = userRepository;
         this.fileRepository = fileRepository;
-        this.storageAccountRepository = accountRepository;
-        this.storageService = storageService;
     }
 
 
@@ -44,24 +40,11 @@ public class UserService {
         return user.getId().toString();
     }
 
-    public List<StoredFileDto> getFilesInBin(UUID userid) {
-        boolean check  = userRepository.existsById(userid);
-        if(check) {
-            List<StoredFileDto> storedFileDtoList = fileRepository.getStoredFileFromStatus(userid , FileStatus.DELETED).
-                    stream().map((file)-> fileToFileDto(file)).toList();
-
-            return storedFileDtoList;
-        }
-
-        else {
-            throw new RuntimeException("User Does not Exists !!");
-        }
-    }
 
     public List<StoredFileDto> getFilesInDrive(UUID userid) {
         boolean check  = userRepository.existsById(userid);
         if(check) {
-            List<StoredFileDto> storedFileDtoList = fileRepository.getStoredFileFromStatus(userid , FileStatus.ACTIVE).
+            List<StoredFileDto> storedFileDtoList = fileRepository.getStoredFileFromStatus(userid , FileStatus.ACTIVE , "").
                     stream().map((file)-> fileToFileDto(file)).toList();
 
             return storedFileDtoList;
@@ -70,34 +53,5 @@ public class UserService {
         else {
             throw new RuntimeException("User Does not Exists !!");
         }
-    }
-
-
-    public String emptyBin(UUID userid) {
-        StorageAccount account = storageAccountRepository.
-                findByUserId(userid).orElseThrow(()-> new RuntimeException("User Does Not Exists"));
-
-        List<StoredFile> fileList = fileRepository.getStoredFileFromStatus(userid, FileStatus.DELETED);
-
-
-        for (StoredFile file : fileList) {
-            long newUsedBytes = account.getUsedBytes() - file.getFileSize();
-
-            System.out.println("Used bytes: " + account.getUsedBytes());
-            System.out.println("File size: " + file.getFileSize());
-            System.out.println("File ID: " + file.getId());
-
-            if (newUsedBytes < 0) {
-                throw new IllegalStateException("Storage usage cannot be negative");
-            }
-
-            account.setUsedBytes(newUsedBytes);
-            storageService.deleteFromStorage(file.getStorageKey());
-        }
-
-        storageAccountRepository.save(account);
-        fileRepository.removeAllByStatus(FileStatus.DELETED , userid);
-
-        return "Deletion Successfull !!";
     }
 }

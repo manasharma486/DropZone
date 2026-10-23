@@ -1,0 +1,25 @@
+$kind: http-request
+description: ""
+url: http://localhost:8080/api/files/upload
+method: POST
+queryParams:
+  - key: file
+    value: ""
+    disabled: true
+    description: ""
+body:
+  type: formdata
+  content:
+    - type: text
+      key: userid
+      value: 981aef3e-b841-414f-8145-a636477b8371
+      description: ""
+      disabled: false
+    - type: file
+      key: file
+      src:
+        - /home/madn/Downloads/Manas_Sharma_Resume.html
+        - /home/madn/Documents/Manas Job Folder/ATS SCORE resume and cover loetter/Java Resume/Orginal/Cover Letter/HotWax Systems Cover Letter.pdf
+      description: ""
+      disabled: false
+order: 2000

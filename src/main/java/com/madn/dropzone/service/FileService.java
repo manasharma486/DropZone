@@ -101,7 +101,7 @@ public class FileService {
     }
 
     public String deleteFile(UUID fileid, UUID userid) {
-        StoredFile file = fileRepository.getStoredFileById(fileid).orElseThrow(() -> new RuntimeException("File Does not exist"));
+        StoredFile file = fileRepository.getStoredFileByIdAndUserId(userid,fileid).orElseThrow(() -> new RuntimeException("File Does not exist"));
         file.setStatus(FileStatus.DELETED);
         fileRepository.save(file);
         return "File Deleated SuccessFully !!";

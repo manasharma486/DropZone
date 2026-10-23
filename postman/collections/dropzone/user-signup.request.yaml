@@ -1,0 +1,14 @@
+$kind: http-request
+description: ""
+url: http://localhost:8080/api/users/signup
+method: POST
+body:
+  type: json
+  content: |-
+    {
+        "name": "Manas",
+        "age": 22,
+        "email": "manas123@gmail.com",
+        "password": "Manas123"
+    }
+order: 1000

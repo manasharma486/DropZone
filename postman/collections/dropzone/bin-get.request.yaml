@@ -1,0 +1,14 @@
+$kind: http-request
+description: ""
+url: http://localhost:8080/api/bin?userid=981aef3e-b841-414f-8145-a636477b8371
+method: GET
+queryParams:
+  - key: userid
+    value: 981aef3e-b841-414f-8145-a636477b8371
+    disabled: false
+    description: ""
+  - key: type
+    value: pdf
+    disabled: true
+    description: ""
+order: 5000
