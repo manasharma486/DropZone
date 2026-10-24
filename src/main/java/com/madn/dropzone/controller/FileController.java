@@ -1,7 +1,9 @@
 package com.madn.dropzone.controller;
 
 import com.madn.dropzone.dto.StoredFileDto;
+import com.madn.dropzone.enums.FileStatus;
 import com.madn.dropzone.service.FileService;
+import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -64,7 +66,7 @@ public class FileController {
     @PatchMapping("/{fileid}/move")
     public ResponseEntity<String> moveFile(@RequestParam("userid") UUID userid,
                                            @PathVariable("fileid") UUID fileid,
-                                           @RequestParam(value = "folderid" , required = false , defaultValue = "") UUID folderid) {
+                                           @RequestParam(value = "folderid" , required = false) UUID folderid) {
         String s  = fileService.moveFile(userid , fileid , folderid);
 
         return ResponseEntity.ok(s);
@@ -75,7 +77,7 @@ public class FileController {
     @PostMapping("/{fileid}/copy")
     public ResponseEntity<String> copyFile(@RequestParam("userid") UUID userid,
                                            @PathVariable("fileid") UUID fileid,
-                                           @RequestParam(value = "folderid" , required = false , defaultValue = "") UUID folderid) {
+                                           @RequestParam(value = "folderid" , required = false) UUID folderid) {
         String s  = fileService.copyFile(userid , fileid , folderid);
 
         return ResponseEntity.ok(s);
@@ -84,21 +86,20 @@ public class FileController {
     // download file
 
     @GetMapping("/{fileid}/download")
-    public ResponseEntity<String> downloadFile(@RequestParam("userid") UUID userid,
-                                               @PathVariable("fileid") UUID fileid) {
-        String s = fileService.downloadFile(userid , fileid);
-
-        return  ResponseEntity.ok(s);
+    public ResponseEntity<Resource> downloadFile(@RequestParam("userid") UUID userid,
+                                                 @PathVariable("fileid") UUID fileid) {
+        return fileService.downloadFile(userid , fileid);
     }
 
     // Search files by filename
     @GetMapping("/search")
     public ResponseEntity<List<StoredFileDto>> searchFiles(
             @RequestParam("userid") UUID userId,
-            @RequestParam("q") String query) {
+            @RequestParam("q") String query,
+            @RequestParam(value = "status" , required = false) FileStatus status) {
 
         return ResponseEntity.ok(
-                fileService.searchFiles(userId, query)
+                fileService.searchFiles(userId, query , status)
         );
     }
 
@@ -107,10 +108,11 @@ public class FileController {
     public ResponseEntity<List<StoredFileDto>> sortFiles(
             @RequestParam("userid") UUID userId,
             @RequestParam(defaultValue = "name") String sortBy,
-            @RequestParam(defaultValue = "asc") String order) {
+            @RequestParam(defaultValue = "asc") String order ,
+            @RequestParam(value = "status" , required = false) FileStatus status) {
 
         return ResponseEntity.ok(
-                fileService.sortDriveFiles(userId, sortBy, order)
+                fileService.sortDriveFiles(userId, sortBy, order , status)
         );
     }
 
@@ -118,10 +120,11 @@ public class FileController {
     @GetMapping(params = "folderId")
     public ResponseEntity<List<StoredFileDto>> getFilesByFolder(
             @RequestParam("userid") UUID userId,
-            @RequestParam("folderId") UUID folderId) {
+            @RequestParam("folderId") UUID folderId,
+            @RequestParam(value = "status" , required = false) FileStatus status) {
 
         return ResponseEntity.ok(
-                fileService.getFilesByFolder(userId, folderId)
+                fileService.getFilesByFolder(userId, folderId , status)
         );
     }
 
@@ -129,10 +132,11 @@ public class FileController {
     @GetMapping(params = "type")
     public ResponseEntity<List<StoredFileDto>> getFilesByType(
             @RequestParam("userid") UUID userId,
-            @RequestParam("type") String type) {
+            @RequestParam("type") String type,
+            @RequestParam(value = "status" , required = false) FileStatus status) {
 
         return ResponseEntity.ok(
-                fileService.getFilesByType(userId, type)
+                fileService.getFilesByType(userId, type , status)
         );
     }
 

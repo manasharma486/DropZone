@@ -72,4 +72,18 @@ public class StorageAccount {
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
     }
+
+    public void storeFileInAccount(StoredFile file) {
+        long currentUsedBytes = getUsedBytes();
+        long afterUsedBytes = currentUsedBytes + file.getFileSize();
+
+        if (afterUsedBytes > getQuotaBytes()) {
+            throw  new RuntimeException("File Cannot Be added , Quota Reached !!");
+        }
+
+        else {
+            setUsedBytes(afterUsedBytes);
+            addFile(file);
+        }
+    }
 }

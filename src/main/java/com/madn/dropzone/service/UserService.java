@@ -39,19 +39,4 @@ public class UserService {
         userRepository.save(user);
         return user.getId().toString();
     }
-
-
-    public List<StoredFileDto> getFilesInDrive(UUID userid) {
-        boolean check  = userRepository.existsById(userid);
-        if(check) {
-            List<StoredFileDto> storedFileDtoList = fileRepository.getStoredFileFromStatus(userid , FileStatus.ACTIVE , "").
-                    stream().map((file)-> fileToFileDto(file)).toList();
-
-            return storedFileDtoList;
-        }
-
-        else {
-            throw new RuntimeException("User Does not Exists !!");
-        }
-    }
 }

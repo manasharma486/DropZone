@@ -1,0 +1,17 @@
+$kind: http-request
+description: ""
+url: http://localhost:8080/api/files/b33d353f-a4a7-49a8-8863-674d35325b96/copy?userid=981aef3e-b841-414f-8145-a636477b8371&folderid
+method: POST
+queryParams:
+  - key: userid
+    value: 981aef3e-b841-414f-8145-a636477b8371
+    disabled: false
+    description: ""
+  - key: folderid
+    value: null
+    disabled: false
+    description: ""
+body:
+  type: json
+  content: ""
+order: 11000

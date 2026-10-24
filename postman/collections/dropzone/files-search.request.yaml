@@ -1,0 +1,18 @@
+$kind: http-request
+description: ""
+url: http://localhost:8080/api/files/search?userid=981aef3e-b841-414f-8145-a636477b8371&q=cover&status=ACTIVE
+method: GET
+queryParams:
+  - key: userid
+    value: 981aef3e-b841-414f-8145-a636477b8371
+    disabled: false
+    description: ""
+  - key: q
+    value: cover
+    disabled: false
+    description: ""
+  - key: status
+    value: ACTIVE
+    disabled: false
+    description: ""
+order: 13000

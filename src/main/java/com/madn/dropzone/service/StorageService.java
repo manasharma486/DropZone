@@ -105,4 +105,29 @@ public class StorageService {
             throw new RuntimeException("Failed to delete file from storage", e);
         }
     }
+
+
+    public Path getFilePath(StoredFile file) {
+
+        Path filePath = storageDestination
+                .resolve(file.getStorageKey())
+                .normalize();
+
+        // Prevent path traversal
+        if (!filePath.startsWith(storageDestination)) {
+            throw new IllegalArgumentException("Invalid storage path");
+        }
+
+        // Check whether the physical file exists and is readable
+        if (!Files.isRegularFile(filePath)
+                || !Files.isReadable(filePath)) {
+
+            throw new IllegalArgumentException(
+                    "Physical file does not exist or is unreadable"
+            );
+        }
+
+        return filePath;
+    }
+
 }

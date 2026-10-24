@@ -24,11 +24,4 @@ public class UserController {
 
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
-
-    @GetMapping("/drive")
-    public ResponseEntity<List<StoredFileDto>> getFiles(@RequestParam("userid") UUID userid) {
-        List<StoredFileDto> storedFileDtoList = service.getFilesInDrive(userid);
-
-        return ResponseEntity.ok(storedFileDtoList);
-    }
 }

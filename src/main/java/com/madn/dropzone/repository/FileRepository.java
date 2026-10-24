@@ -4,6 +4,7 @@ import com.madn.dropzone.entity.StoredFile;
 import com.madn.dropzone.enums.FileStatus;
 import jakarta.transaction.Transactional;
 import kotlin.reflect.KType;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -75,4 +76,37 @@ public interface FileRepository extends JpaRepository<StoredFile , UUID> {
     );
 
     void removeStoredFileByChecksum(String checksum);
+
+    @Query("""
+    SELECT f FROM StoredFile f
+    WHERE LOWER(f.fileName) LIKE LOWER(CONCAT('%', :fileName, '%'))
+    AND f.storageAccount.id = :userid
+    AND f.status = :status
+""")
+    List<StoredFile> getStoredFilesByFileNameAndAccount(
+            @Param("fileName") String fileName,
+            @Param("userid") UUID userid,
+            @Param("status") FileStatus status
+    );
+
+    @Query("""
+    SELECT f FROM StoredFile f
+    WHERE f.storageAccount.id = :userid
+    AND f.status = :status
+""")
+    List<StoredFile> getStoredFilesByAccount(
+            @Param("userid") UUID userid,
+            @Param("status") FileStatus status,
+            Sort sort
+    );
+
+    @Query("""
+    SELECT f from StoredFile f
+    where f.storageAccount.id = :userid
+    AND f.folder.id = :folderid
+    AND f.status = :status
+""")
+    List<StoredFile> getUserFilesInsideFolder(@Param("userid") UUID userid,
+                                              @Param("folderid") UUID folderid,
+                                              @Param("status") FileStatus status);
 }

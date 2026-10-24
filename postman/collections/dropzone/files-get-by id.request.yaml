@@ -1,0 +1,14 @@
+$kind: http-request
+description: ""
+url: http://localhost:8080/api/files/b33d353f-a4a7-49a8-8863-674d35325b96?userid=981aef3e-b841-414f-8145-a636477b8371
+method: GET
+queryParams:
+  - key: userid
+    value: 981aef3e-b841-414f-8145-a636477b8371
+    disabled: false
+    description: ""
+  - key: fileid
+    value: ""
+    disabled: true
+    description: ""
+order: 9000

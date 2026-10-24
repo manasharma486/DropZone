@@ -1,0 +1,7 @@
+$kind: http-request
+description: ""
+url: http://localhost:8080/api/files/b33d353f-a4a7-49a8-8863-674d35325b96/download?userid=981aef3e-b841-414f-8145-a636477b8371
+method: GET
+queryParams:
+  userid: 981aef3e-b841-414f-8145-a636477b8371
+order: 12000

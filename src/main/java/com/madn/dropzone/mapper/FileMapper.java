@@ -3,6 +3,7 @@ package com.madn.dropzone.mapper;
 import com.madn.dropzone.dto.StoredFileDto;
 import com.madn.dropzone.entity.StorageAccount;
 import com.madn.dropzone.entity.StoredFile;
+import com.madn.dropzone.entity.StoredFolder;
 import com.madn.dropzone.enums.FileStatus;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -52,6 +53,23 @@ public class FileMapper {
         file1.setChecksum(file.getChecksum());
 
         file1.setFolder(null);
+
+        return file1;
+    }
+
+    public static StoredFile StoredFileCopy(StoredFile file , StoredFolder folder)
+    {
+        StoredFile file1 = new StoredFile();
+
+        file1.setStorageAccount(file.getStorageAccount());
+        file1.setFileName(file.getFileName());
+        file1.setFileSize(file.getFileSize());
+        file1.setContentType(file.getContentType());
+
+        file1.setStorageKey(file.getStorageKey());
+        file1.setChecksum(file.getChecksum());
+
+        file1.setFolder(folder);
 
         return file1;
     }
