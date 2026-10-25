@@ -37,3 +37,4 @@ build/
 *.pem
 *.key
 /storage
+/.dropzone-planning/

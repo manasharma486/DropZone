@@ -50,10 +50,10 @@ public class FolderController {
     public ResponseEntity<String> renameFolder(
             @RequestParam UUID userId,
             @PathVariable UUID folderId,
-            @RequestBody StoredFolderDto storedFolderDto) {
+            @RequestParam("name") String name) {
         return ResponseEntity.ok(
                 folderService.renameFolder(
-                        userId, folderId, storedFolderDto));
+                        userId, folderId, name));
     }
 
     // Move folder to bin
