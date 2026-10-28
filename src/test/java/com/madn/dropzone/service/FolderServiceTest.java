@@ -7,6 +7,12 @@ import com.madn.dropzone.entity.StorageAccount;
 import com.madn.dropzone.entity.StoredFile;
 import com.madn.dropzone.entity.StoredFolder;
 import com.madn.dropzone.enums.FileStatus;
+import com.madn.dropzone.exception.common.DuplicateResourceException;
+import com.madn.dropzone.exception.common.ResourceNotFoundException;
+import com.madn.dropzone.exception.file.QuotaExceededException;
+import com.madn.dropzone.exception.folder.HierarchyCycleException;
+import com.madn.dropzone.exception.folder.InvalidParentException;
+import com.madn.dropzone.exception.validation.MethodArgumentNotValidException;
 import com.madn.dropzone.repository.FileRepository;
 import com.madn.dropzone.repository.FolderRepository;
 import com.madn.dropzone.repository.StorageAccountRepository;
@@ -20,16 +26,11 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -127,7 +128,7 @@ class FolderServiceTest {
         }
 
         @Test
-        @DisplayName("Throw exception when storage account not found")
+        @DisplayName("Throw ResourceNotFoundException when storage account not found")
         void createFolder_AccountNotFound_ThrowsException() {
             StoredFolderDto dto = new StoredFolderDto();
             dto.setFolderName("Documents");
@@ -135,29 +136,29 @@ class FolderServiceTest {
             when(storageAccountRepository.findByUserId(userId)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> folderService.createFolder(userId, dto))
-                    .isInstanceOf(RuntimeException.class)
+                    .isInstanceOf(ResourceNotFoundException.class)
                     .hasMessageContaining("Storage account not found");
         }
 
         @Test
-        @DisplayName("Throw exception when folder name is null or blank")
+        @DisplayName("Throw MethodArgumentNotValidException when folder name is null or blank")
         void createFolder_NullOrBlankName_ThrowsException() {
             when(storageAccountRepository.findByUserId(userId)).thenReturn(Optional.of(storageAccount));
 
             StoredFolderDto nullDto = null;
             assertThatThrownBy(() -> folderService.createFolder(userId, nullDto))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(MethodArgumentNotValidException.class)
                     .hasMessageContaining("Folder name cannot be empty");
 
             StoredFolderDto emptyDto = new StoredFolderDto();
             emptyDto.setFolderName("   ");
             assertThatThrownBy(() -> folderService.createFolder(userId, emptyDto))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(MethodArgumentNotValidException.class)
                     .hasMessageContaining("Folder name cannot be empty");
         }
 
         @Test
-        @DisplayName("Throw exception when folder name contains prohibited characters")
+        @DisplayName("Throw MethodArgumentNotValidException when folder name contains prohibited characters")
         void createFolder_InvalidNameCharacters_ThrowsException() {
             when(storageAccountRepository.findByUserId(userId)).thenReturn(Optional.of(storageAccount));
 
@@ -168,13 +169,13 @@ class FolderServiceTest {
                 dto.setFolderName(invalidName);
 
                 assertThatThrownBy(() -> folderService.createFolder(userId, dto))
-                        .isInstanceOf(IllegalArgumentException.class)
+                        .isInstanceOf(MethodArgumentNotValidException.class)
                         .hasMessageContaining("prohibited characters");
             }
         }
 
         @Test
-        @DisplayName("Throw exception when folder name exceeds 255 characters")
+        @DisplayName("Throw MethodArgumentNotValidException when folder name exceeds 255 characters")
         void createFolder_NameExceeds255Chars_ThrowsException() {
             when(storageAccountRepository.findByUserId(userId)).thenReturn(Optional.of(storageAccount));
 
@@ -182,12 +183,12 @@ class FolderServiceTest {
             dto.setFolderName("a".repeat(256));
 
             assertThatThrownBy(() -> folderService.createFolder(userId, dto))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(MethodArgumentNotValidException.class)
                     .hasMessageContaining("Folder name cannot exceed 255 characters");
         }
 
         @Test
-        @DisplayName("Throw exception when parent folder does not exist or access denied")
+        @DisplayName("Throw InvalidParentException when parent folder does not exist or access denied")
         void createFolder_ParentNotFound_ThrowsException() {
             UUID parentId = UUID.randomUUID();
             StoredFolderDto dto = new StoredFolderDto();
@@ -198,12 +199,12 @@ class FolderServiceTest {
             when(folderRepository.getStoredFolderByFolderidAndUserId(parentId, userId)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> folderService.createFolder(userId, dto))
-                    .isInstanceOf(RuntimeException.class)
+                    .isInstanceOf(InvalidParentException.class)
                     .hasMessageContaining("Parent folder does not exist or access is denied");
         }
 
         @Test
-        @DisplayName("Throw exception when sibling folder with same name exists at root")
+        @DisplayName("Throw DuplicateResourceException when sibling folder with same name exists at root")
         void createFolder_DuplicateSiblingAtRoot_ThrowsException() {
             StoredFolder existingFolder = new StoredFolder();
             existingFolder.setName("Documents");
@@ -216,12 +217,12 @@ class FolderServiceTest {
             when(storageAccountRepository.findByUserId(userId)).thenReturn(Optional.of(storageAccount));
 
             assertThatThrownBy(() -> folderService.createFolder(userId, dto))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(DuplicateResourceException.class)
                     .hasMessageContaining("already exists in this location");
         }
 
         @Test
-        @DisplayName("Throw exception when sibling folder with same name exists under parent")
+        @DisplayName("Throw DuplicateResourceException when sibling folder with same name exists under parent")
         void createFolder_DuplicateSiblingUnderParent_ThrowsException() {
             UUID parentId = UUID.randomUUID();
             StoredFolder parent = new StoredFolder();
@@ -241,7 +242,7 @@ class FolderServiceTest {
             when(folderRepository.getStoredFolderByFolderidAndUserId(parentId, userId)).thenReturn(Optional.of(parent));
 
             assertThatThrownBy(() -> folderService.createFolder(userId, dto))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(DuplicateResourceException.class)
                     .hasMessageContaining("already exists in this location");
         }
     }
@@ -285,12 +286,12 @@ class FolderServiceTest {
         }
 
         @Test
-        @DisplayName("Throw exception when storage account not found")
+        @DisplayName("Throw ResourceNotFoundException when storage account not found")
         void getAllFolders_AccountNotFound() {
             when(storageAccountRepository.findByUserId(userId)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> folderService.getAllFolders(userId))
-                    .isInstanceOf(RuntimeException.class)
+                    .isInstanceOf(ResourceNotFoundException.class)
                     .hasMessageContaining("Storage account not found");
         }
     }
@@ -338,13 +339,13 @@ class FolderServiceTest {
         }
 
         @Test
-        @DisplayName("Throw exception when folder not found")
+        @DisplayName("Throw ResourceNotFoundException when folder not found")
         void getFolderById_NotFound() {
             UUID folderId = UUID.randomUUID();
             when(folderRepository.getStoredFolderByFolderidAndUserId(folderId, userId)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> folderService.getFolderById(userId, folderId))
-                    .isInstanceOf(RuntimeException.class)
+                    .isInstanceOf(ResourceNotFoundException.class)
                     .hasMessageContaining("Folder not found");
         }
     }
@@ -390,7 +391,7 @@ class FolderServiceTest {
         }
 
         @Test
-        @DisplayName("Throw exception when renaming to duplicate sibling name")
+        @DisplayName("Throw DuplicateResourceException when renaming to duplicate sibling name")
         void renameFolder_DuplicateSiblingName_ThrowsException() {
             UUID folderId = UUID.randomUUID();
             StoredFolder folderToRename = new StoredFolder();
@@ -408,14 +409,14 @@ class FolderServiceTest {
             when(folderRepository.getStoredFolderByFolderidAndUserId(folderId, userId)).thenReturn(Optional.of(folderToRename));
 
             assertThatThrownBy(() -> folderService.renameFolder(userId, folderId, "folderb"))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(DuplicateResourceException.class)
                     .hasMessageContaining("already exists in this location");
 
             verify(folderRepository, never()).save(folderToRename);
         }
 
         @Test
-        @DisplayName("Throw exception when new name is invalid")
+        @DisplayName("Throw MethodArgumentNotValidException when new name is invalid")
         void renameFolder_InvalidName_ThrowsException() {
             UUID folderId = UUID.randomUUID();
             StoredFolder folder = new StoredFolder();
@@ -425,11 +426,11 @@ class FolderServiceTest {
             when(folderRepository.getStoredFolderByFolderidAndUserId(folderId, userId)).thenReturn(Optional.of(folder));
 
             assertThatThrownBy(() -> folderService.renameFolder(userId, folderId, "   "))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(MethodArgumentNotValidException.class)
                     .hasMessageContaining("New folder name cannot be empty");
 
             assertThatThrownBy(() -> folderService.renameFolder(userId, folderId, "invalid/name"))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(MethodArgumentNotValidException.class)
                     .hasMessageContaining("prohibited characters");
         }
     }
@@ -483,13 +484,13 @@ class FolderServiceTest {
         }
 
         @Test
-        @DisplayName("Throw exception when deleting nonexistent folder")
+        @DisplayName("Throw ResourceNotFoundException when deleting nonexistent folder")
         void deleteFolder_NotFound_ThrowsException() {
             UUID folderId = UUID.randomUUID();
             when(folderRepository.getStoredFolderByFolderidAndUserId(folderId, userId)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> folderService.deleteFolder(userId, folderId))
-                    .isInstanceOf(RuntimeException.class)
+                    .isInstanceOf(ResourceNotFoundException.class)
                     .hasMessageContaining("Folder not found");
         }
     }
@@ -550,7 +551,7 @@ class FolderServiceTest {
         }
 
         @Test
-        @DisplayName("Throw exception when moving folder into itself")
+        @DisplayName("Throw HierarchyCycleException when moving folder into itself")
         void moveFolder_IntoSelf_ThrowsException() {
             UUID folderId = UUID.randomUUID();
             StoredFolder folder = new StoredFolder();
@@ -563,12 +564,12 @@ class FolderServiceTest {
             when(folderRepository.getStoredFolderByFolderidAndUserId(folderId, userId)).thenReturn(Optional.of(folder));
 
             assertThatThrownBy(() -> folderService.moveFolder(userId, folderId, dto))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(HierarchyCycleException.class)
                     .hasMessageContaining("Cannot move or copy a folder into itself");
         }
 
         @Test
-        @DisplayName("Throw exception when moving folder into descendant")
+        @DisplayName("Throw HierarchyCycleException when moving folder into descendant")
         void moveFolder_IntoDescendant_ThrowsException() {
             UUID parentId = UUID.randomUUID();
             StoredFolder parent = new StoredFolder();
@@ -594,12 +595,12 @@ class FolderServiceTest {
             when(folderRepository.getStoredFolderByFolderidAndUserId(grandChildId, userId)).thenReturn(Optional.of(grandChild));
 
             assertThatThrownBy(() -> folderService.moveFolder(userId, parentId, dto))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(HierarchyCycleException.class)
                     .hasMessageContaining("Cannot move or copy a folder into one of its descendants");
         }
 
         @Test
-        @DisplayName("Throw exception when move causes sibling conflict in destination")
+        @DisplayName("Throw DuplicateResourceException when move causes sibling conflict in destination")
         void moveFolder_DuplicateSiblingInDestination_ThrowsException() {
             UUID folderId = UUID.randomUUID();
             StoredFolder folder = new StoredFolder();
@@ -625,7 +626,7 @@ class FolderServiceTest {
             when(folderRepository.getStoredFolderByFolderidAndUserId(destinationId, userId)).thenReturn(Optional.of(destination));
 
             assertThatThrownBy(() -> folderService.moveFolder(userId, folderId, dto))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(DuplicateResourceException.class)
                     .hasMessageContaining("already exists in this location");
         }
     }
@@ -698,7 +699,7 @@ class FolderServiceTest {
         }
 
         @Test
-        @DisplayName("Throw exception when copying folder causes quota to exceed")
+        @DisplayName("Throw QuotaExceededException when copying folder causes quota to exceed")
         void copyFolder_QuotaExceeded_ThrowsException() {
             UUID sourceId = UUID.randomUUID();
             StoredFolder source = new StoredFolder();
@@ -719,7 +720,7 @@ class FolderServiceTest {
             when(fileRepository.getUserFilesInsideFolder(userId, sourceId, FileStatus.ACTIVE)).thenReturn(List.of(largeFile));
 
             assertThatThrownBy(() -> folderService.copyFolder(userId, sourceId, null))
-                    .isInstanceOf(RuntimeException.class)
+                    .isInstanceOf(QuotaExceededException.class)
                     .hasMessageContaining("storage quota exceeded");
 
             verify(folderRepository, never()).save(any());
@@ -767,18 +768,18 @@ class FolderServiceTest {
         }
 
         @Test
-        @DisplayName("Throw exception when folder does not exist")
+        @DisplayName("Throw ResourceNotFoundException when folder does not exist")
         void getFolderBreadcrumb_NotFound_ThrowsException() {
             UUID folderId = UUID.randomUUID();
             when(folderRepository.getStoredFolderByFolderidAndUserId(folderId, userId)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> folderService.getFolderBreadcrumb(userId, folderId))
-                    .isInstanceOf(RuntimeException.class)
+                    .isInstanceOf(ResourceNotFoundException.class)
                     .hasMessageContaining("Folder not found");
         }
 
         @Test
-        @DisplayName("Throw IllegalStateException when circular ancestor reference detected (>100)")
+        @DisplayName("Throw HierarchyCycleException when circular ancestor reference detected (>100)")
         void getFolderBreadcrumb_CycleDetected_ThrowsException() {
             UUID folderId = UUID.randomUUID();
             StoredFolder folderA = new StoredFolder();
@@ -795,7 +796,7 @@ class FolderServiceTest {
             when(folderRepository.getStoredFolderByFolderidAndUserId(folderId, userId)).thenReturn(Optional.of(folderA));
 
             assertThatThrownBy(() -> folderService.getFolderBreadcrumb(userId, folderId))
-                    .isInstanceOf(IllegalStateException.class)
+                    .isInstanceOf(HierarchyCycleException.class)
                     .hasMessageContaining("Infinite cycle detected in folder ancestors");
         }
     }

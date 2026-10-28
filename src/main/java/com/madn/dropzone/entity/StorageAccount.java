@@ -78,7 +78,7 @@ public class StorageAccount {
         long afterUsedBytes = currentUsedBytes + file.getFileSize();
 
         if (afterUsedBytes > getQuotaBytes()) {
-            throw  new RuntimeException("File Cannot Be added , Quota Reached !!");
+            throw new com.madn.dropzone.exception.file.QuotaExceededException(file.getFileSize(), getQuotaBytes() - currentUsedBytes);
         }
 
         else {

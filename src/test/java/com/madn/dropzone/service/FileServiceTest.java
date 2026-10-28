@@ -5,6 +5,13 @@ import com.madn.dropzone.entity.StorageAccount;
 import com.madn.dropzone.entity.StoredFile;
 import com.madn.dropzone.entity.StoredFolder;
 import com.madn.dropzone.enums.FileStatus;
+import com.madn.dropzone.exception.common.DuplicateResourceException;
+import com.madn.dropzone.exception.common.ResourceNotFoundException;
+import com.madn.dropzone.exception.file.EmptyFileException;
+import com.madn.dropzone.exception.file.QuotaExceededException;
+import com.madn.dropzone.exception.folder.InvalidParentException;
+import com.madn.dropzone.exception.storage.StorageException;
+import com.madn.dropzone.exception.validation.MethodArgumentNotValidException;
 import com.madn.dropzone.repository.FileRepository;
 import com.madn.dropzone.repository.FolderRepository;
 import com.madn.dropzone.repository.StorageAccountRepository;
@@ -18,10 +25,8 @@ import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockMultipartFile;
-import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
@@ -127,29 +132,29 @@ class FileServiceTest {
         }
 
         @Test
-        @DisplayName("Throw exception when storage account not found")
+        @DisplayName("Throw ResourceNotFoundException when storage account not found")
         void uploadFile_AccountNotFound_ThrowsException() {
             MockMultipartFile file = new MockMultipartFile("file", "test.txt", "text/plain", "data".getBytes());
             when(storageAccountRepository.findByUserId(userId)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> fileService.uploadFile(List.of(file), userId))
-                    .isInstanceOf(RuntimeException.class)
+                    .isInstanceOf(ResourceNotFoundException.class)
                     .hasMessageContaining("Storage account not found");
         }
 
         @Test
-        @DisplayName("Throw exception when file is empty (0 bytes)")
+        @DisplayName("Throw EmptyFileException when file is empty (0 bytes)")
         void uploadFile_EmptyFile_ThrowsException() {
             MockMultipartFile emptyFile = new MockMultipartFile("file", "empty.txt", "text/plain", new byte[0]);
             when(storageAccountRepository.findByUserId(userId)).thenReturn(Optional.of(storageAccount));
 
             assertThatThrownBy(() -> fileService.uploadFile(List.of(emptyFile), userId))
-                    .isInstanceOf(RuntimeException.class)
+                    .isInstanceOf(EmptyFileException.class)
                     .hasMessageContaining("File cannot be empty");
         }
 
         @Test
-        @DisplayName("Throw exception when total upload exceeds quota")
+        @DisplayName("Throw QuotaExceededException when total upload exceeds quota")
         void uploadFile_QuotaExceeded_ThrowsException() {
             storageAccount.setQuotaBytes(100L);
             storageAccount.setUsedBytes(50L);
@@ -158,12 +163,12 @@ class FileServiceTest {
             when(storageAccountRepository.findByUserId(userId)).thenReturn(Optional.of(storageAccount));
 
             assertThatThrownBy(() -> fileService.uploadFile(List.of(file), userId))
-                    .isInstanceOf(RuntimeException.class)
+                    .isInstanceOf(QuotaExceededException.class)
                     .hasMessageContaining("Storage quota exceeded");
         }
 
         @Test
-        @DisplayName("Throw exception when file already exists in user's drive (ACTIVE)")
+        @DisplayName("Throw DuplicateResourceException when file already exists in user's drive (ACTIVE)")
         void uploadFile_AlreadyInDrive_ThrowsException() {
             MockMultipartFile file = new MockMultipartFile("file", "duplicate.pdf", "application/pdf", "content".getBytes());
 
@@ -175,12 +180,12 @@ class FileServiceTest {
             when(fileRepository.existFileInAccount("hash123", userId)).thenReturn(Optional.of(existingFile));
 
             assertThatThrownBy(() -> fileService.uploadFile(List.of(file), userId))
-                    .isInstanceOf(RuntimeException.class)
+                    .isInstanceOf(DuplicateResourceException.class)
                     .hasMessageContaining("already present in the drive");
         }
 
         @Test
-        @DisplayName("Throw exception when file already exists in user's bin (DELETED)")
+        @DisplayName("Throw DuplicateResourceException when file already exists in user's bin (DELETED)")
         void uploadFile_AlreadyInBin_ThrowsException() {
             MockMultipartFile file = new MockMultipartFile("file", "duplicate.pdf", "application/pdf", "content".getBytes());
 
@@ -192,7 +197,7 @@ class FileServiceTest {
             when(fileRepository.existFileInAccount("hash123", userId)).thenReturn(Optional.of(deletedFile));
 
             assertThatThrownBy(() -> fileService.uploadFile(List.of(file), userId))
-                    .isInstanceOf(RuntimeException.class)
+                    .isInstanceOf(DuplicateResourceException.class)
                     .hasMessageContaining("already present in the bin!");
         }
     }
@@ -219,13 +224,13 @@ class FileServiceTest {
         }
 
         @Test
-        @DisplayName("Throw exception when file to delete does not exist")
+        @DisplayName("Throw ResourceNotFoundException when file to delete does not exist")
         void deleteFile_NotFound_ThrowsException() {
             UUID fileId = UUID.randomUUID();
             when(fileRepository.getStoredFileByIdAndUserId(userId, fileId)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> fileService.deleteFile(fileId, userId))
-                    .isInstanceOf(RuntimeException.class)
+                    .isInstanceOf(ResourceNotFoundException.class)
                     .hasMessageContaining("File Does not exist");
         }
     }
@@ -256,12 +261,12 @@ class FileServiceTest {
         }
 
         @Test
-        @DisplayName("Throw exception when user storage account does not exist")
+        @DisplayName("Throw ResourceNotFoundException when user storage account does not exist")
         void getDriveFiles_UserNotFound_ThrowsException() {
             when(storageAccountRepository.existsById(userId)).thenReturn(false);
 
             assertThatThrownBy(() -> fileService.getDriveFiles(userId))
-                    .isInstanceOf(RuntimeException.class)
+                    .isInstanceOf(ResourceNotFoundException.class)
                     .hasMessageContaining("User Does not Exists !!");
         }
     }
@@ -291,13 +296,13 @@ class FileServiceTest {
         }
 
         @Test
-        @DisplayName("Throw exception when single file not found")
+        @DisplayName("Throw ResourceNotFoundException when single file not found")
         void getDriveFile_NotFound_ThrowsException() {
             UUID fileId = UUID.randomUUID();
             when(fileRepository.getStoredFileByIdAndUserId(userId, fileId)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> fileService.getDriveFile(userId, fileId))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(ResourceNotFoundException.class)
                     .hasMessageContaining("File does not exists");
         }
     }
@@ -324,75 +329,75 @@ class FileServiceTest {
         }
 
         @Test
-        @DisplayName("Throw exception when new name is empty or blank")
+        @DisplayName("Throw MethodArgumentNotValidException when new name is empty or blank")
         void updateFileName_Blank_ThrowsException() {
             UUID fileId = UUID.randomUUID();
 
             assertThatThrownBy(() -> fileService.updateFileName(userId, fileId, null))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(MethodArgumentNotValidException.class)
                     .hasMessageContaining("Filename cannot be empty");
 
             assertThatThrownBy(() -> fileService.updateFileName(userId, fileId, "   "))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(MethodArgumentNotValidException.class)
                     .hasMessageContaining("Filename cannot be empty");
         }
 
         @Test
-        @DisplayName("Throw exception when new name exceeds 255 characters")
+        @DisplayName("Throw MethodArgumentNotValidException when new name exceeds 255 characters")
         void updateFileName_TooLong_ThrowsException() {
             UUID fileId = UUID.randomUUID();
             String longName = "a".repeat(256);
 
             assertThatThrownBy(() -> fileService.updateFileName(userId, fileId, longName))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(MethodArgumentNotValidException.class)
                     .hasMessageContaining("Filename cannot exceed 255 characters");
         }
 
         @Test
-        @DisplayName("Throw exception when new name is '.' or '..'")
+        @DisplayName("Throw MethodArgumentNotValidException when new name is '.' or '..'")
         void updateFileName_DotOrDoubleDot_ThrowsException() {
             UUID fileId = UUID.randomUUID();
 
             assertThatThrownBy(() -> fileService.updateFileName(userId, fileId, "."))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(MethodArgumentNotValidException.class)
                     .hasMessageContaining("Invalid filename");
 
             assertThatThrownBy(() -> fileService.updateFileName(userId, fileId, ".."))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(MethodArgumentNotValidException.class)
                     .hasMessageContaining("Invalid filename");
         }
 
         @Test
-        @DisplayName("Throw exception when name contains prohibited characters")
+        @DisplayName("Throw MethodArgumentNotValidException when name contains prohibited characters")
         void updateFileName_ProhibitedCharacters_ThrowsException() {
             UUID fileId = UUID.randomUUID();
             String[] invalid = {"bad/name", "bad\\name", "bad:name", "bad*name", "bad?name", "bad\"name", "bad<name", "bad>name", "bad|name"};
 
             for (String inv : invalid) {
                 assertThatThrownBy(() -> fileService.updateFileName(userId, fileId, inv))
-                        .isInstanceOf(IllegalArgumentException.class)
+                        .isInstanceOf(MethodArgumentNotValidException.class)
                         .hasMessageContaining("Filename cannot contain these characters");
             }
         }
 
         @Test
-        @DisplayName("Throw exception when name ends with a dot or space")
+        @DisplayName("Throw MethodArgumentNotValidException when name ends with a dot or space")
         void updateFileName_EndsWithDotOrSpace_ThrowsException() {
             UUID fileId = UUID.randomUUID();
 
             assertThatThrownBy(() -> fileService.updateFileName(userId, fileId, "name."))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(MethodArgumentNotValidException.class)
                     .hasMessageContaining("Filename cannot end with a dot or space");
         }
 
         @Test
-        @DisplayName("Throw exception when file does not exist")
+        @DisplayName("Throw ResourceNotFoundException when file does not exist")
         void updateFileName_FileNotFound_ThrowsException() {
             UUID fileId = UUID.randomUUID();
             when(fileRepository.getStoredFileByIdAndUserId(userId, fileId)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> fileService.updateFileName(userId, fileId, "valid.txt"))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(ResourceNotFoundException.class)
                     .hasMessageContaining("No File Exist");
         }
     }
@@ -441,18 +446,18 @@ class FileServiceTest {
         }
 
         @Test
-        @DisplayName("Throw exception when file not found")
+        @DisplayName("Throw ResourceNotFoundException when file not found")
         void moveFile_FileNotFound_ThrowsException() {
             UUID fileId = UUID.randomUUID();
             when(fileRepository.getStoredFileByIdAndUserId(userId, fileId)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> fileService.moveFile(userId, fileId, null))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(ResourceNotFoundException.class)
                     .hasMessageContaining("File does not exist or access is denied");
         }
 
         @Test
-        @DisplayName("Throw exception when destination folder not found")
+        @DisplayName("Throw InvalidParentException when destination folder not found")
         void moveFile_FolderNotFound_ThrowsException() {
             UUID fileId = UUID.randomUUID();
             UUID folderId = UUID.randomUUID();
@@ -463,7 +468,7 @@ class FileServiceTest {
             when(folderRepository.getStoredFolderByFolderidAndUserId(folderId, userId)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> fileService.moveFile(userId, fileId, folderId))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(InvalidParentException.class)
                     .hasMessageContaining("Destination folder does not exist");
         }
     }
@@ -506,24 +511,24 @@ class FileServiceTest {
         }
 
         @Test
-        @DisplayName("Throw exception when user does not exist")
+        @DisplayName("Throw ResourceNotFoundException when user does not exist")
         void copyFile_UserNotFound_ThrowsException() {
             when(storageAccountRepository.findByUserId(userId)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> fileService.copyFile(userId, UUID.randomUUID(), null))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(ResourceNotFoundException.class)
                     .hasMessageContaining("User Does not exist");
         }
 
         @Test
-        @DisplayName("Throw exception when source file not found")
+        @DisplayName("Throw ResourceNotFoundException when source file not found")
         void copyFile_FileNotFound_ThrowsException() {
             UUID fileId = UUID.randomUUID();
             when(storageAccountRepository.findByUserId(userId)).thenReturn(Optional.of(storageAccount));
             when(fileRepository.getStoredFileByIdAndUserId(userId, fileId)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> fileService.copyFile(userId, fileId, null))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(ResourceNotFoundException.class)
                     .hasMessageContaining("File does not exist or access is denied");
         }
     }
@@ -568,13 +573,13 @@ class FileServiceTest {
         }
 
         @Test
-        @DisplayName("Throw exception when file to download does not exist")
+        @DisplayName("Throw ResourceNotFoundException when file to download does not exist")
         void downloadFile_FileNotFound_ThrowsException() {
             UUID fileId = UUID.randomUUID();
             when(fileRepository.getStoredFileByIdAndUserId(userId, fileId)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> fileService.downloadFile(userId, fileId))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(ResourceNotFoundException.class)
                     .hasMessageContaining("File does not exist or access is denied");
         }
     }
@@ -603,30 +608,30 @@ class FileServiceTest {
         }
 
         @Test
-        @DisplayName("Throw exception when searching with TRASHED status")
+        @DisplayName("Throw MethodArgumentNotValidException when searching with TRASHED status")
         void searchFiles_TrashedStatus_ThrowsException() {
             assertThatThrownBy(() -> fileService.searchFiles(userId, "test", FileStatus.TRASHED))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(MethodArgumentNotValidException.class)
                     .hasMessageContaining("Not Allowed");
         }
 
         @Test
-        @DisplayName("Throw exception when user does not exist")
+        @DisplayName("Throw ResourceNotFoundException when user does not exist")
         void searchFiles_UserNotFound_ThrowsException() {
             when(userRepository.existsById(userId)).thenReturn(false);
 
             assertThatThrownBy(() -> fileService.searchFiles(userId, "query", FileStatus.ACTIVE))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(ResourceNotFoundException.class)
                     .hasMessageContaining("Invalid User ID");
         }
 
         @Test
-        @DisplayName("Throw exception when search query is empty or blank")
+        @DisplayName("Throw MethodArgumentNotValidException when search query is empty or blank")
         void searchFiles_EmptyQuery_ThrowsException() {
             when(userRepository.existsById(userId)).thenReturn(true);
 
             assertThatThrownBy(() -> fileService.searchFiles(userId, "   ", FileStatus.ACTIVE))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(MethodArgumentNotValidException.class)
                     .hasMessageContaining("Search query cannot be empty");
         }
     }
@@ -656,32 +661,32 @@ class FileServiceTest {
         }
 
         @Test
-        @DisplayName("Throw exception when order is invalid")
+        @DisplayName("Throw MethodArgumentNotValidException when order is invalid")
         void sortDriveFiles_InvalidOrder_ThrowsException() {
             when(userRepository.existsById(userId)).thenReturn(true);
 
             assertThatThrownBy(() -> fileService.sortDriveFiles(userId, "name", "invalid_order", FileStatus.ACTIVE))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(MethodArgumentNotValidException.class)
                     .hasMessageContaining("Invalid order type");
         }
 
         @Test
-        @DisplayName("Throw exception when sort field is invalid")
+        @DisplayName("Throw MethodArgumentNotValidException when sort field is invalid")
         void sortDriveFiles_InvalidField_ThrowsException() {
             when(userRepository.existsById(userId)).thenReturn(true);
 
             assertThatThrownBy(() -> fileService.sortDriveFiles(userId, "unknown_field", "asc", FileStatus.ACTIVE))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(MethodArgumentNotValidException.class)
                     .hasMessageContaining("Invalid sort field");
         }
 
         @Test
-        @DisplayName("Throw exception when status is TRASHED")
+        @DisplayName("Throw MethodArgumentNotValidException when status is TRASHED")
         void sortDriveFiles_TrashedStatus_ThrowsException() {
             when(userRepository.existsById(userId)).thenReturn(true);
 
             assertThatThrownBy(() -> fileService.sortDriveFiles(userId, "name", "asc", FileStatus.TRASHED))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(MethodArgumentNotValidException.class)
                     .hasMessageContaining("Not Allowed");
         }
     }
@@ -714,14 +719,14 @@ class FileServiceTest {
         }
 
         @Test
-        @DisplayName("Throw exception when folder is invalid or not found")
+        @DisplayName("Throw InvalidParentException when folder is invalid or not found")
         void getFilesByFolder_FolderNotFound_ThrowsException() {
             UUID folderId = UUID.randomUUID();
             when(userRepository.existsById(userId)).thenReturn(true);
             when(folderRepository.getStoredFolderByFolderidAndUserId(folderId, userId)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> fileService.getFilesByFolder(userId, folderId, FileStatus.ACTIVE))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(InvalidParentException.class)
                     .hasMessageContaining("Invalid Folder provided !!");
         }
     }
@@ -750,12 +755,12 @@ class FileServiceTest {
         }
 
         @Test
-        @DisplayName("Throw exception when status is TRASHED")
+        @DisplayName("Throw MethodArgumentNotValidException when status is TRASHED")
         void getFilesByType_TrashedStatus_ThrowsException() {
             when(userRepository.existsById(userId)).thenReturn(true);
 
             assertThatThrownBy(() -> fileService.getFilesByType(userId, "image", FileStatus.TRASHED))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(MethodArgumentNotValidException.class)
                     .hasMessageContaining("Not Allowed");
         }
     }

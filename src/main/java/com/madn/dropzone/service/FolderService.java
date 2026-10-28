@@ -8,6 +8,12 @@ import com.madn.dropzone.entity.StorageAccount;
 import com.madn.dropzone.entity.StoredFile;
 import com.madn.dropzone.entity.StoredFolder;
 import com.madn.dropzone.enums.FileStatus;
+import com.madn.dropzone.exception.common.DuplicateResourceException;
+import com.madn.dropzone.exception.common.ResourceNotFoundException;
+import com.madn.dropzone.exception.file.QuotaExceededException;
+import com.madn.dropzone.exception.folder.HierarchyCycleException;
+import com.madn.dropzone.exception.folder.InvalidParentException;
+import com.madn.dropzone.exception.validation.MethodArgumentNotValidException;
 import com.madn.dropzone.mapper.FileMapper;
 import com.madn.dropzone.mapper.FolderMapper;
 import com.madn.dropzone.repository.FileRepository;
@@ -32,10 +38,10 @@ public class FolderService {
     @Transactional
     public String createFolder(UUID userId, StoredFolderDto storedFolderDto) {
         StorageAccount account = storageAccountRepository.findByUserId(userId)
-                .orElseThrow(() -> new RuntimeException("Storage account not found for user: " + userId));
+                .orElseThrow(() -> new ResourceNotFoundException("Storage account not found for user: " + userId));
 
         if (storedFolderDto == null || storedFolderDto.getFolderName() == null || storedFolderDto.getFolderName().trim().isEmpty()) {
-            throw new IllegalArgumentException("Folder name cannot be empty");
+            throw new MethodArgumentNotValidException("Folder name cannot be empty");
         }
 
         String folderName = storedFolderDto.getFolderName().trim();
@@ -44,7 +50,7 @@ public class FolderService {
         StoredFolder parent = null;
         if (storedFolderDto.getParentFolder() != null) {
             parent = folderRepository.getStoredFolderByFolderidAndUserId(storedFolderDto.getParentFolder(), userId)
-                    .orElseThrow(() -> new RuntimeException("Parent folder does not exist or access is denied"));
+                    .orElseThrow(() -> new InvalidParentException("Parent folder does not exist or access is denied"));
         }
 
         validateUniqueSiblingName(account, parent, folderName, null);
@@ -61,7 +67,7 @@ public class FolderService {
     @Transactional(readOnly = true)
     public List<StoredFolderDto> getAllFolders(UUID userId) {
         StorageAccount account = storageAccountRepository.findByUserId(userId)
-                .orElseThrow(() -> new RuntimeException("Storage account not found for user: " + userId));
+                .orElseThrow(() -> new ResourceNotFoundException("Storage account not found for user: " + userId));
 
         List<StoredFolder> folders = account.getFolders();
         if (folders == null || folders.isEmpty()) {
@@ -76,7 +82,7 @@ public class FolderService {
     @Transactional(readOnly = true)
     public StoredFolderDto getFolderById(UUID userId, UUID folderId) {
         StoredFolder folder = folderRepository.getStoredFolderByFolderidAndUserId(folderId, userId)
-                .orElseThrow(() -> new RuntimeException("Folder not found: " + folderId));
+                .orElseThrow(() -> new ResourceNotFoundException("Folder not found: " + folderId));
 
         StoredFolderDto dto = FolderMapper.folderToDto(folder);
         dto.setFileFolderDto(getFolderContents(userId, folderId));
@@ -86,10 +92,10 @@ public class FolderService {
     @Transactional
     public String renameFolder(UUID userId, UUID folderId, String name) {
         StoredFolder folder = folderRepository.getStoredFolderByFolderidAndUserId(folderId, userId)
-                .orElseThrow(() -> new RuntimeException("Folder not found: " + folderId));
+                .orElseThrow(() -> new ResourceNotFoundException("Folder not found: " + folderId));
 
-        if (name == null || name == null || name.trim().isEmpty()) {
-            throw new IllegalArgumentException("New folder name cannot be empty");
+        if (name == null || name.trim().isEmpty()) {
+            throw new MethodArgumentNotValidException("New folder name cannot be empty");
         }
 
         String newName = name.trim();
@@ -107,7 +113,7 @@ public class FolderService {
     @Transactional
     public String deleteFolder(UUID userId, UUID folderId) {
         StoredFolder rootFolder = folderRepository.getStoredFolderByFolderidAndUserId(folderId, userId)
-                .orElseThrow(() -> new RuntimeException("Folder not found: " + folderId));
+                .orElseThrow(() -> new ResourceNotFoundException("Folder not found: " + folderId));
 
         deleteFolderRecursively(userId, rootFolder);
 
@@ -117,7 +123,7 @@ public class FolderService {
     @Transactional(readOnly = true)
     public FileFolderDto getFolderContents(UUID userId, UUID folderId) {
         StoredFolder folder = folderRepository.getStoredFolderByFolderidAndUserId(folderId, userId)
-                .orElseThrow(() -> new RuntimeException("Folder not found: " + folderId));
+                .orElseThrow(() -> new ResourceNotFoundException("Folder not found: " + folderId));
 
         List<StoredFile> activeFiles = fileRepository.getUserFilesInsideFolder(userId, folderId, FileStatus.ACTIVE);
         List<StoredFileDto> fileDtos = (activeFiles != null)
@@ -135,14 +141,14 @@ public class FolderService {
     @Transactional
     public String moveFolder(UUID userId, UUID folderId, StoredFolderDto storedFolderDto) {
         StoredFolder folder = folderRepository.getStoredFolderByFolderidAndUserId(folderId, userId)
-                .orElseThrow(() -> new RuntimeException("Folder not found: " + folderId));
+                .orElseThrow(() -> new ResourceNotFoundException("Folder not found: " + folderId));
 
         UUID destinationFolderId = storedFolderDto != null ? storedFolderDto.getParentFolder() : null;
 
         StoredFolder destination = null;
         if (destinationFolderId != null) {
             destination = folderRepository.getStoredFolderByFolderidAndUserId(destinationFolderId, userId)
-                    .orElseThrow(() -> new RuntimeException("Destination folder does not exist or access is denied: " + destinationFolderId));
+                    .orElseThrow(() -> new InvalidParentException("Destination folder does not exist or access is denied: " + destinationFolderId));
 
             validateNotMovingIntoSelfOrDescendant(folder, destination);
         }
@@ -158,17 +164,17 @@ public class FolderService {
     @Transactional
     public String copyFolder(UUID userId, UUID folderId, StoredFolderDto storedFolderDto) {
         StorageAccount account = storageAccountRepository.findByUserId(userId)
-                .orElseThrow(() -> new RuntimeException("Storage account not found for user: " + userId));
+                .orElseThrow(() -> new ResourceNotFoundException("Storage account not found for user: " + userId));
 
         StoredFolder sourceFolder = folderRepository.getStoredFolderByFolderidAndUserId(folderId, userId)
-                .orElseThrow(() -> new RuntimeException("Folder not found: " + folderId));
+                .orElseThrow(() -> new ResourceNotFoundException("Folder not found: " + folderId));
 
         UUID destinationFolderId = storedFolderDto != null ? storedFolderDto.getParentFolder() : null;
 
         StoredFolder destination = null;
         if (destinationFolderId != null) {
             destination = folderRepository.getStoredFolderByFolderidAndUserId(destinationFolderId, userId)
-                    .orElseThrow(() -> new RuntimeException("Destination folder does not exist or access is denied: " + destinationFolderId));
+                    .orElseThrow(() -> new InvalidParentException("Destination folder does not exist or access is denied: " + destinationFolderId));
 
             validateNotMovingIntoSelfOrDescendant(sourceFolder, destination);
         }
@@ -185,7 +191,7 @@ public class FolderService {
 
         long totalSubtreeBytes = calculateSubtreeActiveFileSize(userId, sourceFolder);
         if (account.getUsedBytes() + totalSubtreeBytes > account.getQuotaBytes()) {
-            throw new RuntimeException("Cannot copy folder: storage quota exceeded");
+            throw new QuotaExceededException("Cannot copy folder: storage quota exceeded");
         }
 
         deepCopyFolder(userId, sourceFolder, destination, copyName, account);
@@ -201,14 +207,14 @@ public class FolderService {
         }
 
         StoredFolder current = folderRepository.getStoredFolderByFolderidAndUserId(folderId, userId)
-                .orElseThrow(() -> new RuntimeException("Folder not found: " + folderId));
+                .orElseThrow(() -> new ResourceNotFoundException("Folder not found: " + folderId));
 
         LinkedList<BreadcrumbItemDto> breadcrumbs = new LinkedList<>();
         int safetyLimit = 0;
 
         while (current != null) {
             if (++safetyLimit > 100) {
-                throw new IllegalStateException("Infinite cycle detected in folder ancestors");
+                throw new HierarchyCycleException("Infinite cycle detected in folder ancestors");
             }
             breadcrumbs.addFirst(BreadcrumbItemDto.builder()
                     .id(current.getId())
@@ -244,17 +250,17 @@ public class FolderService {
 
     private void validateNotMovingIntoSelfOrDescendant(StoredFolder source, StoredFolder destination) {
         if (source.getId().equals(destination.getId())) {
-            throw new IllegalArgumentException("Cannot move or copy a folder into itself");
+            throw new HierarchyCycleException("Cannot move or copy a folder into itself");
         }
 
         StoredFolder ancestor = destination.getParentFolder();
         int depth = 0;
         while (ancestor != null) {
             if (++depth > 100) {
-                throw new IllegalStateException("Cycle detected in ancestor tree");
+                throw new HierarchyCycleException("Cycle detected in ancestor tree");
             }
             if (ancestor.getId().equals(source.getId())) {
-                throw new IllegalArgumentException("Cannot move or copy a folder into one of its descendants");
+                throw new HierarchyCycleException("Cannot move or copy a folder into one of its descendants");
             }
             ancestor = ancestor.getParentFolder();
         }
@@ -269,7 +275,7 @@ public class FolderService {
                         continue;
                     }
                     if (sibling.getName().equalsIgnoreCase(name)) {
-                        throw new IllegalArgumentException("A folder with name '" + name + "' already exists in this location");
+                        throw new DuplicateResourceException("A folder with name '" + name + "' already exists in this location");
                     }
                 }
             }
@@ -281,7 +287,7 @@ public class FolderService {
                         continue;
                     }
                     if (sibling.getParentFolder() == null && sibling.getName().equalsIgnoreCase(name)) {
-                        throw new IllegalArgumentException("A folder with name '" + name + "' already exists in this location");
+                        throw new DuplicateResourceException("A folder with name '" + name + "' already exists in this location");
                     }
                 }
             }
@@ -290,13 +296,13 @@ public class FolderService {
 
     private void validateFolderName(String name) {
         if (name == null || name.trim().isEmpty()) {
-            throw new IllegalArgumentException("Folder name cannot be empty");
+            throw new MethodArgumentNotValidException("Folder name cannot be empty");
         }
         if (name.length() > 255) {
-            throw new IllegalArgumentException("Folder name cannot exceed 255 characters");
+            throw new MethodArgumentNotValidException("Folder name cannot exceed 255 characters");
         }
         if (name.matches(".*[\\\\/:*?\"<>|].*")) {
-            throw new IllegalArgumentException("Folder name contains prohibited characters (\\ / : * ? \" < > |)");
+            throw new MethodArgumentNotValidException("Folder name contains prohibited characters (\\ / : * ? \" < > |)");
         }
     }
 

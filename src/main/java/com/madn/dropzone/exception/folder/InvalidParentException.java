@@ -1,5 +1,6 @@
-package com.madn.dropzone.exception;
+package com.madn.dropzone.exception.folder;
 
+import com.madn.dropzone.exception.DropZoneException;
 import org.springframework.http.HttpStatus;
 
 public class InvalidParentException extends DropZoneException {

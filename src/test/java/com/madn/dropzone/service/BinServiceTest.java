@@ -5,6 +5,9 @@ import com.madn.dropzone.dto.StoredFileDto;
 import com.madn.dropzone.entity.StorageAccount;
 import com.madn.dropzone.entity.StoredFile;
 import com.madn.dropzone.enums.FileStatus;
+import com.madn.dropzone.exception.common.DataIntegrityViolationException;
+import com.madn.dropzone.exception.common.ResourceNotFoundException;
+import com.madn.dropzone.exception.validation.MethodArgumentNotValidException;
 import com.madn.dropzone.repository.FileRepository;
 import com.madn.dropzone.repository.StorageAccountRepository;
 import com.madn.dropzone.repository.UserRepository;
@@ -84,12 +87,12 @@ class BinServiceTest {
         }
 
         @Test
-        @DisplayName("Throw exception when user does not exist")
+        @DisplayName("Throw ResourceNotFoundException when user does not exist")
         void getFilesInBin_UserNotFound_ThrowsException() {
             when(userRepository.existsById(userId)).thenReturn(false);
 
             assertThatThrownBy(() -> binService.getFilesInBin(userId, "pdf"))
-                    .isInstanceOf(RuntimeException.class)
+                    .isInstanceOf(ResourceNotFoundException.class)
                     .hasMessageContaining("User Does not Exists !!");
         }
     }
@@ -157,7 +160,7 @@ class BinServiceTest {
         }
 
         @Test
-        @DisplayName("Throw exception when file to restore is not found")
+        @DisplayName("Throw ResourceNotFoundException when file to restore is not found")
         void restoreFiles_NotFound_ThrowsException() {
             UUID fileId = UUID.randomUUID();
             when(fileRepository.getStoredFileByIdAndUserId(userId, fileId)).thenReturn(Optional.empty());
@@ -165,12 +168,12 @@ class BinServiceTest {
             BinFileDto dto = new BinFileDto(List.of(fileId));
 
             assertThatThrownBy(() -> binService.restoreFiles(userId, dto))
-                    .isInstanceOf(RuntimeException.class)
+                    .isInstanceOf(ResourceNotFoundException.class)
                     .hasMessageContaining("File not found: " + fileId);
         }
 
         @Test
-        @DisplayName("Throw IllegalStateException when file to restore is not in DELETED status")
+        @DisplayName("Throw MethodArgumentNotValidException when file to restore is not in DELETED status")
         void restoreFiles_NotDeletedStatus_ThrowsException() {
             UUID fileId = UUID.randomUUID();
             StoredFile file = new StoredFile();
@@ -182,7 +185,7 @@ class BinServiceTest {
             BinFileDto dto = new BinFileDto(List.of(fileId));
 
             assertThatThrownBy(() -> binService.restoreFiles(userId, dto))
-                    .isInstanceOf(IllegalStateException.class)
+                    .isInstanceOf(MethodArgumentNotValidException.class)
                     .hasMessageContaining("Only deleted files can be restored");
         }
     }
@@ -291,33 +294,33 @@ class BinServiceTest {
         }
 
         @Test
-        @DisplayName("Throw exception when user account does not exist")
+        @DisplayName("Throw ResourceNotFoundException when user account does not exist")
         void deleteFiles_AccountNotFound_ThrowsException() {
             when(storageAccountRepository.findByUserId(userId)).thenReturn(Optional.empty());
 
             BinFileDto dto = new BinFileDto(List.of(UUID.randomUUID()));
 
             assertThatThrownBy(() -> binService.deleteFiles(userId, dto))
-                    .isInstanceOf(RuntimeException.class)
+                    .isInstanceOf(ResourceNotFoundException.class)
                     .hasMessageContaining("User does not exist");
         }
 
         @Test
-        @DisplayName("Throw exception when file IDs list is null or empty")
+        @DisplayName("Throw MethodArgumentNotValidException when file IDs list is null or empty")
         void deleteFiles_EmptyFileIds_ThrowsException() {
             when(storageAccountRepository.findByUserId(userId)).thenReturn(Optional.of(storageAccount));
 
             assertThatThrownBy(() -> binService.deleteFiles(userId, new BinFileDto(null)))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(MethodArgumentNotValidException.class)
                     .hasMessageContaining("No file IDs provided");
 
             assertThatThrownBy(() -> binService.deleteFiles(userId, new BinFileDto(Collections.emptyList())))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(MethodArgumentNotValidException.class)
                     .hasMessageContaining("No file IDs provided");
         }
 
         @Test
-        @DisplayName("Throw exception when file is not found")
+        @DisplayName("Throw ResourceNotFoundException when file is not found")
         void deleteFiles_FileNotFound_ThrowsException() {
             UUID fileId = UUID.randomUUID();
             when(storageAccountRepository.findByUserId(userId)).thenReturn(Optional.of(storageAccount));
@@ -326,12 +329,12 @@ class BinServiceTest {
             BinFileDto dto = new BinFileDto(List.of(fileId));
 
             assertThatThrownBy(() -> binService.deleteFiles(userId, dto))
-                    .isInstanceOf(RuntimeException.class)
+                    .isInstanceOf(ResourceNotFoundException.class)
                     .hasMessageContaining("File not found: " + fileId);
         }
 
         @Test
-        @DisplayName("Throw IllegalStateException when file is not in DELETED status")
+        @DisplayName("Throw MethodArgumentNotValidException when file is not in DELETED status")
         void deleteFiles_NotDeletedStatus_ThrowsException() {
             UUID fileId = UUID.randomUUID();
             StoredFile file = new StoredFile();
@@ -344,12 +347,12 @@ class BinServiceTest {
             BinFileDto dto = new BinFileDto(List.of(fileId));
 
             assertThatThrownBy(() -> binService.deleteFiles(userId, dto))
-                    .isInstanceOf(IllegalStateException.class)
+                    .isInstanceOf(MethodArgumentNotValidException.class)
                     .hasMessageContaining("Only deleted files can be permanently removed");
         }
 
         @Test
-        @DisplayName("Throw IllegalStateException when total bytes to remove exceeds used bytes")
+        @DisplayName("Throw DataIntegrityViolationException when total bytes to remove exceeds used bytes")
         void deleteFiles_NegativeUsage_ThrowsException() {
             UUID fileId = UUID.randomUUID();
             StoredFile file = new StoredFile();
@@ -363,7 +366,7 @@ class BinServiceTest {
             BinFileDto dto = new BinFileDto(List.of(fileId));
 
             assertThatThrownBy(() -> binService.deleteFiles(userId, dto))
-                    .isInstanceOf(IllegalStateException.class)
+                    .isInstanceOf(DataIntegrityViolationException.class)
                     .hasMessageContaining("Storage usage cannot be negative");
         }
     }
@@ -412,12 +415,12 @@ class BinServiceTest {
         }
 
         @Test
-        @DisplayName("Throw exception when user account does not exist")
+        @DisplayName("Throw ResourceNotFoundException when user account does not exist")
         void deleteAllFiles_AccountNotFound_ThrowsException() {
             when(storageAccountRepository.findByUserId(userId)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> binService.deleteAllFiles(userId))
-                    .isInstanceOf(RuntimeException.class)
+                    .isInstanceOf(ResourceNotFoundException.class)
                     .hasMessageContaining("User does not exist");
         }
     }

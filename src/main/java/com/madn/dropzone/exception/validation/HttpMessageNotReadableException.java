@@ -1,5 +1,6 @@
-package com.madn.dropzone.exception;
+package com.madn.dropzone.exception.validation;
 
+import com.madn.dropzone.exception.DropZoneException;
 import org.springframework.http.HttpStatus;
 
 public class HttpMessageNotReadableException extends DropZoneException {

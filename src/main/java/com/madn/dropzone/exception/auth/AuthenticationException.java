@@ -1,5 +1,6 @@
-package com.madn.dropzone.exception;
+package com.madn.dropzone.exception.auth;
 
+import com.madn.dropzone.exception.DropZoneException;
 import org.springframework.http.HttpStatus;
 
 public class AuthenticationException extends DropZoneException {

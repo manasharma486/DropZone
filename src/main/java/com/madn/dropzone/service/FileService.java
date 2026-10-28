@@ -1,15 +1,22 @@
 package com.madn.dropzone.service;
+
 import com.madn.dropzone.dto.StoredFileDto;
 import com.madn.dropzone.entity.StorageAccount;
 import com.madn.dropzone.entity.StoredFile;
 import com.madn.dropzone.entity.StoredFolder;
 import com.madn.dropzone.enums.FileStatus;
+import com.madn.dropzone.exception.common.DuplicateResourceException;
+import com.madn.dropzone.exception.common.ResourceNotFoundException;
+import com.madn.dropzone.exception.file.EmptyFileException;
+import com.madn.dropzone.exception.file.QuotaExceededException;
+import com.madn.dropzone.exception.folder.InvalidParentException;
+import com.madn.dropzone.exception.storage.StorageException;
+import com.madn.dropzone.exception.validation.MethodArgumentNotValidException;
 import com.madn.dropzone.mapper.FileMapper;
 import com.madn.dropzone.repository.FileRepository;
 import com.madn.dropzone.repository.FolderRepository;
 import com.madn.dropzone.repository.StorageAccountRepository;
 import com.madn.dropzone.repository.UserRepository;
-import org.springframework.boot.data.autoconfigure.web.DataWebProperties;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.data.domain.Sort;
@@ -20,10 +27,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
 import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.net.MalformedURLException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -35,16 +39,16 @@ import static com.madn.dropzone.mapper.FileMapper.fileToFileDto;
 @Service
 public class FileService {
     private final UserRepository userRepository;
-    private StorageService storageService;
-    private FileRepository fileRepository;
-    private StorageAccountRepository storageAccountRepository;
-    private FolderRepository folderRepository;
+    private final StorageService storageService;
+    private final FileRepository fileRepository;
+    private final StorageAccountRepository storageAccountRepository;
+    private final FolderRepository folderRepository;
 
-
-    public FileService(StorageService storageService ,
-                       FileRepository fileRepository ,
+    public FileService(StorageService storageService,
+                       FileRepository fileRepository,
                        StorageAccountRepository storageAccountRepository,
-                       FolderRepository folderRepository, UserRepository userRepository) {
+                       FolderRepository folderRepository,
+                       UserRepository userRepository) {
         this.fileRepository = fileRepository;
         this.storageService = storageService;
         this.storageAccountRepository = storageAccountRepository;
@@ -58,20 +62,20 @@ public class FileService {
         StorageAccount account = storageAccountRepository
                 .findByUserId(userID)
                 .orElseThrow(() ->
-                        new RuntimeException("Storage account not found"));
+                        new ResourceNotFoundException("Storage account not found for user: " + userID));
 
         long additionalBytes = 0;
 
         for (MultipartFile file : files) {
 
             if (file.isEmpty()) {
-                throw new RuntimeException("File cannot be empty");
+                throw new EmptyFileException("File cannot be empty");
             }
 
             additionalBytes += file.getSize();
 
             if (additionalBytes > account.getQuotaBytes() - account.getUsedBytes()) {
-                throw new RuntimeException("Storage quota exceeded");
+                throw new QuotaExceededException("Storage quota exceeded");
             }
 
             String checksum = storageService.calculateChecksum(file);
@@ -84,12 +88,12 @@ public class FileService {
                 StoredFile existingFile = fileOptional.get();
 
                 if (existingFile.getStatus() == FileStatus.DELETED) {
-                    throw new RuntimeException(
+                    throw new DuplicateResourceException(
                             "File cannot be added; it is already present in the bin!"
                     );
                 }
 
-                throw new RuntimeException(
+                throw new DuplicateResourceException(
                         "File cannot be added; it is already present in the drive"
                 );
             }
@@ -126,73 +130,62 @@ public class FileService {
     }
 
     public String deleteFile(UUID fileid, UUID userid) {
-        StoredFile file = fileRepository.getStoredFileByIdAndUserId(userid,fileid).orElseThrow(() -> new RuntimeException("File Does not exist"));
+        StoredFile file = fileRepository.getStoredFileByIdAndUserId(userid, fileid)
+                .orElseThrow(() -> new ResourceNotFoundException("File Does not exist with id: " + fileid));
         file.setStatus(FileStatus.DELETED);
         fileRepository.save(file);
         return "File Deleated SuccessFully !!";
     }
 
     public List<StoredFileDto> getDriveFiles(UUID userid) {
-        boolean check  = storageAccountRepository.existsById(userid);
-        if(check) {
-            List<StoredFileDto> storedFileDtoList = fileRepository.getStoredFileFromStatus(userid , FileStatus.ACTIVE , "").
-                    stream().map((file)-> fileToFileDto(file)).toList();
-
-            return storedFileDtoList;
-        }
-
-        else {
-            throw new RuntimeException("User Does not Exists !!");
+        boolean check = storageAccountRepository.existsById(userid);
+        if (check) {
+            return fileRepository.getStoredFileFromStatus(userid, FileStatus.ACTIVE, "")
+                    .stream()
+                    .map(FileMapper::fileToFileDto)
+                    .toList();
+        } else {
+            throw new ResourceNotFoundException("User Does not Exists !!");
         }
     }
 
     public StoredFileDto getDriveFile(UUID userid, UUID fileid) {
-        StoredFile storedFile = fileRepository.getStoredFileByIdAndUserId(userid , fileid).orElseThrow(()->
-                    new IllegalArgumentException("File does not exists"));
-
+        StoredFile storedFile = fileRepository.getStoredFileByIdAndUserId(userid, fileid)
+                .orElseThrow(() -> new ResourceNotFoundException("File does not exists with id: " + fileid));
 
         return FileMapper.fileToFileDto(storedFile);
     }
 
-
     public String updateFileName(UUID userid, UUID fileid, String name) {
 
-        // Check for null or empty filename
         if (name == null || name.isBlank()) {
-            throw new IllegalArgumentException("Filename cannot be empty");
+            throw new MethodArgumentNotValidException("Filename cannot be empty");
         }
 
-        // Remove leading and trailing whitespace
         name = name.trim();
 
-        // Check filename length
         if (name.length() > 255) {
-            throw new IllegalArgumentException("Filename cannot exceed 255 characters");
+            throw new MethodArgumentNotValidException("Filename cannot exceed 255 characters");
         }
 
-        // Prevent special filenames
         if (name.equals(".") || name.equals("..")) {
-            throw new IllegalArgumentException("Invalid filename");
+            throw new MethodArgumentNotValidException("Invalid filename");
         }
 
-        // Reject characters that are invalid or problematic in filenames
         if (name.matches(".*[\\\\/:*?\"<>|].*")) {
-            throw new IllegalArgumentException(
+            throw new MethodArgumentNotValidException(
                     "Filename cannot contain these characters: \\ / : * ? \" < > |"
             );
         }
 
-        // Reject filenames ending with a dot or space
         if (name.endsWith(".") || name.endsWith(" ")) {
-            throw new IllegalArgumentException(
+            throw new MethodArgumentNotValidException(
                     "Filename cannot end with a dot or space"
             );
         }
 
-        // Your file-renaming logic goes here
-
-        StoredFile storedFile = fileRepository.getStoredFileByIdAndUserId(userid , fileid).orElseThrow(() ->
-                new IllegalArgumentException("No File Exist"));
+        StoredFile storedFile = fileRepository.getStoredFileByIdAndUserId(userid, fileid)
+                .orElseThrow(() -> new ResourceNotFoundException("No File Exist with id: " + fileid));
 
         storedFile.setFileName(name);
         fileRepository.save(storedFile);
@@ -203,65 +196,53 @@ public class FileService {
     @Transactional
     public String moveFile(UUID userId, UUID fileId, UUID folderId) {
 
-       
         StoredFile storedFile = fileRepository
                 .getStoredFileByIdAndUserId(userId, fileId)
                 .orElseThrow(() ->
-                        new IllegalArgumentException("File does not exist or access is denied"));
+                        new ResourceNotFoundException("File does not exist or access is denied with id: " + fileId));
 
-    
         if (folderId == null) {
             storedFile.setFolder(null);
-        }
-
-        else {
+        } else {
             StoredFolder folder = folderRepository
                     .getStoredFolderByFolderidAndUserId(folderId, userId)
                     .orElseThrow(() ->
-                            new IllegalArgumentException("Destination folder does not exist"));
+                            new InvalidParentException("Destination folder does not exist: " + folderId));
 
             storedFile.setFolder(folder);
         }
 
-      
         fileRepository.save(storedFile);
 
         return "File moved successfully!";
     }
 
-
     public String copyFile(UUID userid, UUID fileid, UUID folderid) {
 
-        StorageAccount account = storageAccountRepository.findByUserId(userid).orElseThrow(
-                ()-> new IllegalArgumentException("User Does not exist")
-        );
+        StorageAccount account = storageAccountRepository.findByUserId(userid)
+                .orElseThrow(() -> new ResourceNotFoundException("User Does not exist: " + userid));
 
         StoredFile storedFile = fileRepository
                 .getStoredFileByIdAndUserId(userid, fileid)
                 .orElseThrow(() ->
-                        new IllegalArgumentException("File does not exist or access is denied"));
-        
-        
-        StoredFile copyFile = FileMapper.StoredFileCopy(storedFile , null);
+                        new ResourceNotFoundException("File does not exist or access is denied with id: " + fileid));
+
+        StoredFile copyFile = FileMapper.StoredFileCopy(storedFile, null);
         account.storeFileInAccount(copyFile);
-
-
 
         if (folderid != null) {
             StoredFolder folder = folderRepository
                     .getStoredFolderByFolderidAndUserId(folderid, userid)
                     .orElseThrow(() ->
-                            new IllegalArgumentException("Destination folder does not exist"));
-            
-            
+                            new InvalidParentException("Destination folder does not exist: " + folderid));
+
             copyFile.setFolder(folder);
         }
-        
+
         fileRepository.save(copyFile);
         storageAccountRepository.save(account);
-        
+
         return "Copying Successfull !!";
-        
     }
 
     public ResponseEntity<Resource> downloadFile(UUID userid, UUID fileid) {
@@ -269,9 +250,7 @@ public class FileService {
         StoredFile storedFile = fileRepository
                 .getStoredFileByIdAndUserId(userid, fileid)
                 .orElseThrow(() ->
-                        new IllegalArgumentException("File does not exist or access is denied"));
-
-        // download logic
+                        new ResourceNotFoundException("File does not exist or access is denied with id: " + fileid));
 
         try {
             Path filePath = storageService.getFilePath(storedFile);
@@ -299,40 +278,35 @@ public class FileService {
                     )
                     .body(resource);
 
+        } catch (IOException e) {
+            throw new StorageException("Unable to download the file !! ", e);
         }
-        catch (IOException e) {
-            throw new UncheckedIOException( "Unable to download the file !! " , e);
-        }
-
     }
 
-
-    public List<StoredFileDto> searchFiles(UUID userId, String query , FileStatus status) {
+    public List<StoredFileDto> searchFiles(UUID userId, String query, FileStatus status) {
 
         if (status == null) {
             status = FileStatus.ACTIVE;
         } else if (status == FileStatus.TRASHED) {
-            throw new IllegalArgumentException("Not Allowed");
+            throw new MethodArgumentNotValidException("Searching trashed files is Not Allowed");
         }
 
         if (userId == null || !userRepository.existsById(userId)) {
-            throw new IllegalArgumentException("Invalid User ID");
+            throw new ResourceNotFoundException("Invalid User ID: " + userId);
         }
 
         if (query == null || query.isBlank()) {
-            throw new IllegalArgumentException("Search query cannot be empty");
+            throw new MethodArgumentNotValidException("Search query cannot be empty");
         }
 
         return fileRepository
                 .getStoredFilesByFileNameAndAccount(
-                        query.trim(), userId , status
+                        query.trim(), userId, status
                 )
                 .stream()
                 .map(FileMapper::fileToFileDto)
                 .toList();
     }
-
-
 
     public List<StoredFileDto> sortDriveFiles(
             UUID userId,
@@ -341,26 +315,26 @@ public class FileService {
             FileStatus status
     ) {
         if (userId == null || !userRepository.existsById(userId)) {
-            throw new IllegalArgumentException("Invalid User ID");
+            throw new ResourceNotFoundException("Invalid User ID: " + userId);
         }
 
         if (sortBy == null || order == null) {
-            throw new IllegalArgumentException(
+            throw new MethodArgumentNotValidException(
                     "Sort field and order are required"
             );
         }
 
         if (status == null) {
             status = FileStatus.ACTIVE;
-        }else if (status == FileStatus.TRASHED) {
-            throw new IllegalArgumentException("Not Allowed");
+        } else if (status == FileStatus.TRASHED) {
+            throw new MethodArgumentNotValidException("Sorting trashed files is Not Allowed");
         }
 
         sortBy = sortBy.trim().toLowerCase();
         order = order.trim().toLowerCase();
 
         if (!order.equals("asc") && !order.equals("desc")) {
-            throw new IllegalArgumentException("Invalid order type");
+            throw new MethodArgumentNotValidException("Invalid order type");
         }
 
         // Whitelist allowed sorting fields
@@ -369,7 +343,7 @@ public class FileService {
             case "date" -> "uploadedAt";
             case "size" -> "fileSize";
             case "type" -> "contentType";
-            default -> throw new IllegalArgumentException(
+            default -> throw new MethodArgumentNotValidException(
                     "Invalid sort field. Use name, date, size, or type"
             );
         };
@@ -379,51 +353,48 @@ public class FileService {
                 : Sort.by(sortField).descending();
 
         return fileRepository
-                .getStoredFilesByAccount(userId, status , sort)
+                .getStoredFilesByAccount(userId, status, sort)
                 .stream()
                 .map(FileMapper::fileToFileDto)
                 .toList();
     }
 
-    public List<StoredFileDto> getFilesByFolder(UUID userId, UUID folderId , FileStatus status) {
+    public List<StoredFileDto> getFilesByFolder(UUID userId, UUID folderId, FileStatus status) {
         if (userId == null || !userRepository.existsById(userId)) {
-            throw new IllegalArgumentException("Invalid User ID");
+            throw new ResourceNotFoundException("Invalid User ID: " + userId);
         }
 
         if (status == null) {
             status = FileStatus.ACTIVE;
         } else if (status == FileStatus.TRASHED) {
-            throw new IllegalArgumentException("Not Allowed");
+            throw new MethodArgumentNotValidException("Viewing trashed files by folder is Not Allowed");
         }
 
-        Optional<StoredFolder> folder = folderRepository.getStoredFolderByFolderidAndUserId(folderId,userId);
-        if (folderId ==null || folder.isEmpty()) {
-            throw new IllegalArgumentException("Invalid Folder provided !!");
+        Optional<StoredFolder> folder = folderRepository.getStoredFolderByFolderidAndUserId(folderId, userId);
+        if (folderId == null || folder.isEmpty()) {
+            throw new InvalidParentException("Invalid Folder provided !!");
         }
 
-
-
-    return fileRepository.getUserFilesInsideFolder(userId , folderId ,status).
-            stream().
-            map(FileMapper::fileToFileDto)
-            .toList();
+        return fileRepository.getUserFilesInsideFolder(userId, folderId, status)
+                .stream()
+                .map(FileMapper::fileToFileDto)
+                .toList();
     }
 
-    public List<StoredFileDto> getFilesByType(UUID userId, String type , FileStatus status) {
+    public List<StoredFileDto> getFilesByType(UUID userId, String type, FileStatus status) {
         if (userId == null || !userRepository.existsById(userId)) {
-            throw new IllegalArgumentException("Invalid User ID");
+            throw new ResourceNotFoundException("Invalid User ID: " + userId);
         }
 
         if (status == null) {
             status = FileStatus.ACTIVE;
         } else if (status == FileStatus.TRASHED) {
-            throw new IllegalArgumentException("Not Allowed");
+            throw new MethodArgumentNotValidException("Viewing trashed files by type is Not Allowed");
         }
 
-        List<StoredFileDto> storedFileDtoList;
-        storedFileDtoList = fileRepository.getStoredFileFromStatus(userId , status , "%" + type + "%").
-                stream().map((file)-> fileToFileDto(file)).toList();
-        return storedFileDtoList;
-
+        return fileRepository.getStoredFileFromStatus(userId, status, "%" + type + "%")
+                .stream()
+                .map(FileMapper::fileToFileDto)
+                .toList();
     }
 }
