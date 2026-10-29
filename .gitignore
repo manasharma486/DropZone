@@ -38,3 +38,8 @@ build/
 *.key
 /storage
 /.dropzone-planning/
+**/AGENTS.md
+**/CLAUDE.md
+**/GEMINI.md
+**/SKILL.md
+/DESIGN.md

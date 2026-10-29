@@ -14,7 +14,7 @@ import java.util.UUID;
 @Service
 public class JwtService {
 
-    @Value("${dropzone.jwt.secret:defaultSuperSecretKeyForDropZone2026Min32BytesLength}")
+    @Value("${dropzone.jwt.secret}")
     private String secret;
 
     @Value("${dropzone.jwt.access-token-expiration-ms:900000}")

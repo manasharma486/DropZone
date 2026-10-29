@@ -10,9 +10,9 @@
 	</parent>
 	<groupId>com.madn</groupId>
 	<artifactId>dropzone</artifactId>
-	<version>0.0.1-SNAPSHOT</version>
-	<name/>
-	<description/>
+	<version>1.1.0</version>
+	<name>Dropzone</name>
+	<description>Self-hosted file storage and drive application</description>
 	<url/>
 	<licenses>
 		<license/>
