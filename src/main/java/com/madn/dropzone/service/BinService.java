@@ -4,14 +4,17 @@ import com.madn.dropzone.dto.BinFileDto;
 import com.madn.dropzone.dto.StoredFileDto;
 import com.madn.dropzone.entity.StorageAccount;
 import com.madn.dropzone.entity.StoredFile;
+import com.madn.dropzone.entity.StoredFolder;
 import com.madn.dropzone.enums.FileStatus;
-import com.madn.dropzone.exception.common.DataIntegrityViolationException;
 import com.madn.dropzone.exception.common.ResourceNotFoundException;
 import com.madn.dropzone.exception.validation.MethodArgumentNotValidException;
 import com.madn.dropzone.mapper.FileMapper;
 import com.madn.dropzone.repository.FileRepository;
+import com.madn.dropzone.repository.FolderRepository;
+import com.madn.dropzone.repository.PhysicalStorageObjectRepository;
 import com.madn.dropzone.repository.StorageAccountRepository;
 import com.madn.dropzone.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,19 +22,26 @@ import java.util.*;
 
 @Service
 public class BinService {
+
     private final UserRepository userRepository;
     private final FileRepository fileRepository;
     private final StorageAccountRepository storageAccountRepository;
     private final StorageService storageService;
+    private final PhysicalStorageObjectRepository physicalStorageObjectRepository;
+
+    @Autowired(required = false)
+    private FolderRepository folderRepository;
 
     public BinService(UserRepository userRepository,
                       FileRepository fileRepository,
                       StorageAccountRepository storageAccountRepository,
-                      StorageService storageService) {
+                      StorageService storageService,
+                      @Autowired(required = false) PhysicalStorageObjectRepository physicalStorageObjectRepository) {
         this.userRepository = userRepository;
         this.fileRepository = fileRepository;
         this.storageAccountRepository = storageAccountRepository;
         this.storageService = storageService;
+        this.physicalStorageObjectRepository = physicalStorageObjectRepository;
     }
 
     public List<StoredFileDto> getFilesInBin(UUID userid, String type) {
@@ -48,7 +58,6 @@ public class BinService {
 
     @Transactional
     public String restoreFiles(UUID userid, BinFileDto binFileDto) {
-
         if (binFileDto == null || binFileDto.getFileIDs() == null || binFileDto.getFileIDs().isEmpty()) {
             return "Nothing to restore";
         }
@@ -60,7 +69,6 @@ public class BinService {
         List<StoredFile> filesToRestore = new ArrayList<>();
 
         for (UUID fileId : uniqueFileIds) {
-
             StoredFile file = fileRepository
                     .getStoredFileByIdAndUserId(userid, fileId)
                     .orElseThrow(() ->
@@ -72,18 +80,23 @@ public class BinService {
                 );
             }
 
+            // Verify underlying storage object is still valid and readable before restoring
+            try {
+                storageService.getFilePath(file);
+            } catch (Exception e) {
+                throw new ResourceNotFoundException("Cannot restore file " + fileId + ": underlying storage object is no longer valid");
+            }
+
             file.setStatus(FileStatus.ACTIVE);
             filesToRestore.add(file);
         }
 
         fileRepository.saveAll(filesToRestore);
-
         return "Selected files restored successfully!";
     }
 
     @Transactional
     public String restoreAllFiles(UUID userid) {
-
         List<StoredFile> fileList =
                 fileRepository.getStoredFileFromStatus(
                         userid,
@@ -91,22 +104,37 @@ public class BinService {
                         ""
                 );
 
+        if (folderRepository != null) {
+            StorageAccount account = storageAccountRepository.findByUserId(userid).orElse(null);
+            if (account != null) {
+                List<StoredFolder> deletedFolders = folderRepository.findByStorageAccountIdAndStatus(account.getId(), FileStatus.DELETED);
+                for (StoredFolder folder : deletedFolders) {
+                    folder.setStatus(FileStatus.ACTIVE);
+                }
+                folderRepository.saveAll(deletedFolders);
+            }
+        }
+
         if (fileList.isEmpty()) {
             return "Nothing to restore";
         }
 
         for (StoredFile file : fileList) {
-            file.setStatus(FileStatus.ACTIVE);
+            // Verify underlying storage object is still valid
+            try {
+                storageService.getFilePath(file);
+                file.setStatus(FileStatus.ACTIVE);
+            } catch (Exception ignored) {
+                // If invalid, keep deleted
+            }
         }
 
         fileRepository.saveAll(fileList);
-
         return "All files have been restored successfully!";
     }
 
     @Transactional
     public String deleteFiles(UUID userid, BinFileDto binFileDto) {
-
         StorageAccount account = storageAccountRepository
                 .findByUserId(userid)
                 .orElseThrow(() ->
@@ -116,7 +144,7 @@ public class BinService {
             throw new MethodArgumentNotValidException("No file IDs provided");
         }
 
-        // Prevent processing the same file more than once.
+        // Prevent processing duplicate file IDs in the same request
         List<UUID> uniqueFileIds = new ArrayList<>(
                 new LinkedHashSet<>(binFileDto.getFileIDs())
         );
@@ -124,7 +152,6 @@ public class BinService {
         List<StoredFile> fileList = new ArrayList<>();
 
         for (UUID fileId : uniqueFileIds) {
-
             StoredFile file = fileRepository
                     .getStoredFileByIdAndUserId(userid, fileId)
                     .orElseThrow(() ->
@@ -139,14 +166,12 @@ public class BinService {
             fileList.add(file);
         }
 
-        deleteFromStorage(fileList, account);
-
+        purgeFilesFromBin(fileList, account);
         return "Files deleted successfully!";
     }
 
     @Transactional
     public String deleteAllFiles(UUID userid) {
-
         StorageAccount account = storageAccountRepository
                 .findByUserId(userid)
                 .orElseThrow(() ->
@@ -155,57 +180,63 @@ public class BinService {
         List<StoredFile> fileList = fileRepository
                 .getStoredFileFromStatus(userid, FileStatus.DELETED, "");
 
+        if (folderRepository != null) {
+            List<StoredFolder> deletedFolders = folderRepository.findByStorageAccountIdAndStatus(account.getId(), FileStatus.DELETED);
+            for (StoredFolder folder : deletedFolders) {
+                folderRepository.delete(folder);
+            }
+        }
+
         if (fileList.isEmpty()) {
             return "Bin is already empty!";
         }
 
-        deleteFromStorage(fileList, account);
-
+        purgeFilesFromBin(fileList, account);
         return "All files deleted successfully!";
     }
 
-    private boolean canWeRemoveItFromStorage(StoredFile file) {
-
-        long count = fileRepository.countFilesWithStatuses(
-                file.getChecksum(),
-                List.of(FileStatus.DELETED, FileStatus.ACTIVE)
-        );
-
-        return count == 0;
+    @com.madn.dropzone.aspect.AuditAction(action = "BIN_RESTORE")
+    @Transactional
+    public void restoreFiles(UUID userId, com.madn.dropzone.dto.request.BinActionRequest request) {
+        if (request == null || request.getFileIds() == null || request.getFileIds().isEmpty()) {
+            return;
+        }
+        BinFileDto dto = new BinFileDto();
+        dto.setFileIDs(request.getFileIds());
+        restoreFiles(userId, dto);
     }
 
-    private void deleteFromStorage(
-            List<StoredFile> storedFileList,
-            StorageAccount account) {
+    @com.madn.dropzone.aspect.AuditAction(action = "BIN_PURGE")
+    @Transactional
+    public void deleteFiles(UUID userId, com.madn.dropzone.dto.request.BinActionRequest request) {
+        if (request == null || request.getFileIds() == null || request.getFileIds().isEmpty()) {
+            return;
+        }
+        BinFileDto dto = new BinFileDto();
+        dto.setFileIDs(request.getFileIds());
+        deleteFiles(userId, dto);
+    }
 
+    /**
+     * Permanently purges user file metadata and decrements physical storage references.
+     * Physical file deletion is delegated entirely to the Garbage Collector.
+     */
+    private void purgeFilesFromBin(List<StoredFile> storedFileList, StorageAccount account) {
         long totalBytesToRemove = storedFileList.stream()
                 .mapToLong(StoredFile::getFileSize)
                 .sum();
 
-        if (totalBytesToRemove > account.getUsedBytes()) {
-            throw new DataIntegrityViolationException(
-                    "Storage usage cannot be negative"
-            );
-        }
-
-        // Update quota once, after validating the total.
-        account.setUsedBytes(account.getUsedBytes() - totalBytesToRemove);
+        // Adjust user quota
+        account.setUsedBytes(Math.max(0L, account.getUsedBytes() - totalBytesToRemove));
 
         for (StoredFile file : storedFileList) {
-            file.setStatus(FileStatus.TRASHED);
-        }
-
-        fileRepository.saveAllAndFlush(storedFileList);
-
-        for (StoredFile file : storedFileList) {
-
-            if (canWeRemoveItFromStorage(file)) {
-                storageService.deleteFromStorage(file.getStorageKey());
-
-                fileRepository.removeStoredFileByChecksum(
-                        file.getChecksum()
-                );
+            // Decrement physical storage object reference count by exactly 1
+            if (physicalStorageObjectRepository != null && file.getChecksum() != null) {
+                physicalStorageObjectRepository.decrementReferenceCount(file.getChecksum());
             }
+
+            // Permanently remove user-specific metadata record
+            fileRepository.delete(file);
         }
 
         storageAccountRepository.save(account);

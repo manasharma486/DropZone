@@ -20,20 +20,24 @@ import com.madn.dropzone.repository.FileRepository;
 import com.madn.dropzone.repository.FolderRepository;
 import com.madn.dropzone.repository.StorageAccountRepository;
 import com.madn.dropzone.repository.UserRepository;
-import lombok.AllArgsConstructor;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 
 @Service
-@AllArgsConstructor
+@RequiredArgsConstructor
 public class FolderService {
 
     private final FolderRepository folderRepository;
     private final FileRepository fileRepository;
     private final StorageAccountRepository storageAccountRepository;
     private final UserRepository userRepository;
+
+    @Autowired(required = false)
+    private com.madn.dropzone.repository.PhysicalStorageObjectRepository physicalStorageObjectRepository;
 
     @Transactional
     public String createFolder(UUID userId, StoredFolderDto storedFolderDto) {
@@ -70,6 +74,34 @@ public class FolderService {
                 .orElseThrow(() -> new ResourceNotFoundException("Storage account not found for user: " + userId));
 
         List<StoredFolder> folders = account.getFolders();
+        if (folders == null || folders.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        return folders.stream()
+                .filter(f -> f.getStatus() == null || f.getStatus() == FileStatus.ACTIVE)
+                .map(FolderMapper::folderToDto)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<StoredFolderDto> getAllFolders(UUID userId, FileStatus status) {
+        if (status == null || status == FileStatus.ACTIVE) {
+            return getAllFolders(userId);
+        }
+
+        StorageAccount account = storageAccountRepository.findByUserId(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Storage account not found for user: " + userId));
+
+        List<StoredFolder> folders = folderRepository.findByStorageAccountIdAndStatus(account.getId(), status);
+        if (folders == null || folders.isEmpty()) {
+            if (account.getFolders() != null) {
+                folders = account.getFolders().stream()
+                        .filter(f -> f.getStatus() == status)
+                        .toList();
+            }
+        }
+
         if (folders == null || folders.isEmpty()) {
             return Collections.emptyList();
         }
@@ -132,7 +164,10 @@ public class FolderService {
 
         List<StoredFolder> childFolders = folder.getChildFolders();
         List<StoredFolderDto> folderDtos = (childFolders != null)
-                ? childFolders.stream().map(FolderMapper::folderToDto).toList()
+                ? childFolders.stream()
+                        .filter(f -> f.getStatus() == null || f.getStatus() == FileStatus.ACTIVE)
+                        .map(FolderMapper::folderToDto)
+                        .toList()
                 : Collections.emptyList();
 
         return new FileFolderDto(fileDtos, folderDtos);
@@ -227,7 +262,85 @@ public class FolderService {
         return breadcrumbs;
     }
 
+    @Transactional
+    public String restoreFolder(UUID userId, UUID folderId) {
+        StoredFolder folder = folderRepository.getStoredFolderByFolderidAndUserId(folderId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Folder not found: " + folderId));
+
+        if (folder.getStatus() != FileStatus.DELETED) {
+            throw new MethodArgumentNotValidException("Only deleted folders can be restored: " + folderId);
+        }
+
+        restoreFolderRecursively(userId, folder);
+        return "Folder restored successfully";
+    }
+
+    private void restoreFolderRecursively(UUID userId, StoredFolder currentFolder) {
+        currentFolder.setStatus(FileStatus.ACTIVE);
+        folderRepository.save(currentFolder);
+
+        List<StoredFolder> children = currentFolder.getChildFolders();
+        if (children != null) {
+            for (StoredFolder child : children) {
+                if (child.getStatus() == FileStatus.DELETED) {
+                    restoreFolderRecursively(userId, child);
+                }
+            }
+        }
+
+        List<StoredFile> files = fileRepository.getUserFilesInsideFolder(userId, currentFolder.getId(), FileStatus.DELETED);
+        if (files != null) {
+            for (StoredFile file : files) {
+                file.setStatus(FileStatus.ACTIVE);
+                fileRepository.save(file);
+            }
+        }
+    }
+
+    @Transactional
+    public String deleteFolderPermanently(UUID userId, UUID folderId) {
+        StorageAccount account = storageAccountRepository.findByUserId(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Storage account not found for user: " + userId));
+
+        StoredFolder folder = folderRepository.getStoredFolderByFolderidAndUserId(folderId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Folder not found: " + folderId));
+
+        if (folder.getStatus() != FileStatus.DELETED) {
+            throw new MethodArgumentNotValidException("Only deleted folders can be permanently removed: " + folderId);
+        }
+
+        purgeFolderRecursively(userId, folder, account);
+        storageAccountRepository.save(account);
+        return "Folder permanently deleted";
+    }
+
+    private void purgeFolderRecursively(UUID userId, StoredFolder currentFolder, StorageAccount account) {
+        List<StoredFolder> children = currentFolder.getChildFolders();
+        if (children != null) {
+            List<StoredFolder> childList = new ArrayList<>(children);
+            for (StoredFolder child : childList) {
+                purgeFolderRecursively(userId, child, account);
+            }
+        }
+
+        List<StoredFile> files = fileRepository.getUserFilesInsideFolder(userId, currentFolder.getId(), FileStatus.DELETED);
+        if (files != null) {
+            for (StoredFile file : files) {
+                if (physicalStorageObjectRepository != null && file.getChecksum() != null) {
+                    physicalStorageObjectRepository.decrementReferenceCount(file.getChecksum());
+                }
+                account.setUsedBytes(Math.max(0L, account.getUsedBytes() - file.getFileSize()));
+                fileRepository.delete(file);
+            }
+        }
+
+        folderRepository.delete(currentFolder);
+    }
+
     private void deleteFolderRecursively(UUID userId, StoredFolder currentFolder) {
+        currentFolder.setStatus(FileStatus.DELETED);
+        folderRepository.save(currentFolder);
+
         List<StoredFolder> children = currentFolder.getChildFolders();
         if (children != null) {
             List<StoredFolder> childList = new ArrayList<>(children);
@@ -240,12 +353,9 @@ public class FolderService {
         if (files != null) {
             for (StoredFile file : files) {
                 file.setStatus(FileStatus.DELETED);
-                file.setFolder(null);
                 fileRepository.save(file);
             }
         }
-
-        folderRepository.delete(currentFolder);
     }
 
     private void validateNotMovingIntoSelfOrDescendant(StoredFolder source, StoredFolder destination) {
@@ -274,6 +384,9 @@ public class FolderService {
                     if (excludeFolderId != null && sibling.getId().equals(excludeFolderId)) {
                         continue;
                     }
+                    if (sibling.getStatus() != null && sibling.getStatus() != FileStatus.ACTIVE) {
+                        continue;
+                    }
                     if (sibling.getName().equalsIgnoreCase(name)) {
                         throw new DuplicateResourceException("A folder with name '" + name + "' already exists in this location");
                     }
@@ -284,6 +397,9 @@ public class FolderService {
             if (accountFolders != null) {
                 for (StoredFolder sibling : accountFolders) {
                     if (excludeFolderId != null && sibling.getId().equals(excludeFolderId)) {
+                        continue;
+                    }
+                    if (sibling.getStatus() != null && sibling.getStatus() != FileStatus.ACTIVE) {
                         continue;
                     }
                     if (sibling.getParentFolder() == null && sibling.getName().equalsIgnoreCase(name)) {
@@ -345,5 +461,103 @@ public class FolderService {
                 deepCopyFolder(userId, child, savedFolder, child.getName(), account);
             }
         }
+    }
+
+    @com.madn.dropzone.aspect.AuditAction(action = "FOLDER_CREATE")
+    @Transactional
+    public com.madn.dropzone.dto.response.FolderResponse createFolder(
+            UUID userId, com.madn.dropzone.dto.request.CreateFolderRequest request) {
+        StorageAccount account = storageAccountRepository.findByUserId(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Storage account not found for user: " + userId));
+
+        if (request == null || request.getName() == null || request.getName().trim().isEmpty()) {
+            throw new MethodArgumentNotValidException("Folder name cannot be empty");
+        }
+
+        String folderName = request.getName().trim();
+        validateFolderName(folderName);
+
+        StoredFolder parent = null;
+        if (request.getParentFolderId() != null) {
+            parent = folderRepository.getStoredFolderByFolderidAndUserId(request.getParentFolderId(), userId)
+                    .orElseThrow(() -> new InvalidParentException("Parent folder does not exist or access is denied"));
+        }
+
+        validateUniqueSiblingName(account, parent, folderName, null);
+
+        StoredFolder folder = new StoredFolder();
+        folder.setName(folderName);
+        folder.setStorageAccount(account);
+        folder.setParentFolder(parent);
+
+        StoredFolder savedFolder = folderRepository.save(folder);
+        if (parent != null && parent.getChildFolders() != null) {
+            parent.getChildFolders().add(savedFolder);
+        }
+        if (account.getFolders() != null) {
+            account.getFolders().add(savedFolder);
+        }
+        return FolderMapper.folderToFolderResponse(savedFolder);
+    }
+
+    @Transactional(readOnly = true)
+    public com.madn.dropzone.dto.response.FolderResponse getFolder(UUID userId, UUID folderId) {
+        StoredFolder folder = folderRepository.getStoredFolderByFolderidAndUserId(folderId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Folder not found: " + folderId));
+        return FolderMapper.folderToFolderResponse(folder);
+    }
+
+    @com.madn.dropzone.aspect.AuditAction(action = "FOLDER_RENAME")
+    @Transactional
+    public com.madn.dropzone.dto.response.FolderResponse renameFolder(
+            UUID userId, UUID folderId, com.madn.dropzone.dto.request.RenameFolderRequest request) {
+        if (request == null || request.getName() == null || request.getName().trim().isEmpty()) {
+            throw new MethodArgumentNotValidException("New folder name cannot be empty");
+        }
+        renameFolder(userId, folderId, request.getName());
+        StoredFolder folder = folderRepository.getStoredFolderByFolderidAndUserId(folderId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Folder not found: " + folderId));
+        return FolderMapper.folderToFolderResponse(folder);
+    }
+
+    @com.madn.dropzone.aspect.AuditAction(action = "FOLDER_MOVE")
+    @Transactional
+    public com.madn.dropzone.dto.response.FolderResponse moveFolder(
+            UUID userId, UUID folderId, com.madn.dropzone.dto.request.MoveFolderRequest request) {
+        StoredFolderDto dto = new StoredFolderDto();
+        if (request != null) {
+            dto.setParentFolder(request.getDestinationFolderId());
+        }
+        moveFolder(userId, folderId, dto);
+        StoredFolder folder = folderRepository.getStoredFolderByFolderidAndUserId(folderId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Folder not found: " + folderId));
+        return FolderMapper.folderToFolderResponse(folder);
+    }
+
+    @Transactional(readOnly = true)
+    public List<com.madn.dropzone.dto.response.BreadcrumbItem> getBreadcrumbs(UUID userId, UUID folderId) {
+        if (folderId == null) {
+            return List.of(com.madn.dropzone.dto.response.BreadcrumbItem.builder().id(null).name("My Drive").build());
+        }
+
+        StoredFolder current = folderRepository.getStoredFolderByFolderidAndUserId(folderId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Folder not found: " + folderId));
+
+        LinkedList<com.madn.dropzone.dto.response.BreadcrumbItem> breadcrumbs = new LinkedList<>();
+        int safetyLimit = 0;
+
+        while (current != null) {
+            if (++safetyLimit > 100) {
+                throw new HierarchyCycleException("Infinite cycle detected in folder ancestors");
+            }
+            breadcrumbs.addFirst(com.madn.dropzone.dto.response.BreadcrumbItem.builder()
+                    .id(current.getId())
+                    .name(current.getName())
+                    .build());
+            current = current.getParentFolder();
+        }
+
+        breadcrumbs.addFirst(com.madn.dropzone.dto.response.BreadcrumbItem.builder().id(null).name("My Drive").build());
+        return breadcrumbs;
     }
 }

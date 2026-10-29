@@ -472,15 +472,16 @@ class FolderServiceTest {
 
             assertThat(result).isEqualTo("Folder deleted successfully");
 
+            assertThat(parent.getStatus()).isEqualTo(FileStatus.DELETED);
+            assertThat(child.getStatus()).isEqualTo(FileStatus.DELETED);
             assertThat(parentFile.getStatus()).isEqualTo(FileStatus.DELETED);
-            assertThat(parentFile.getFolder()).isNull();
             assertThat(childFile.getStatus()).isEqualTo(FileStatus.DELETED);
-            assertThat(childFile.getFolder()).isNull();
 
+            verify(folderRepository).save(parent);
+            verify(folderRepository).save(child);
             verify(fileRepository).save(parentFile);
             verify(fileRepository).save(childFile);
-            verify(folderRepository).delete(child);
-            verify(folderRepository).delete(parent);
+            verify(folderRepository, never()).delete(any());
         }
 
         @Test

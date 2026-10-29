@@ -2,9 +2,8 @@ package com.madn.dropzone.repository;
 
 import com.madn.dropzone.entity.StoredFile;
 import com.madn.dropzone.enums.FileStatus;
-import jakarta.transaction.Transactional;
-import kotlin.reflect.KType;
 import org.springframework.data.domain.Sort;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -109,4 +108,47 @@ public interface FileRepository extends JpaRepository<StoredFile , UUID> {
     List<StoredFile> getUserFilesInsideFolder(@Param("userid") UUID userid,
                                               @Param("folderid") UUID folderid,
                                               @Param("status") FileStatus status);
+
+    @Query("""
+    SELECT f FROM StoredFile f
+    WHERE f.storageAccount.id = :accountId
+      AND f.folder IS NULL
+      AND f.status = :status
+    """)
+    org.springframework.data.domain.Page<StoredFile> findRootFiles(
+            @Param("accountId") UUID accountId,
+            @Param("status") FileStatus status,
+            org.springframework.data.domain.Pageable pageable
+    );
+
+    @Query("""
+    SELECT f FROM StoredFile f
+    WHERE f.storageAccount.id = :accountId
+      AND f.folder.id = :folderId
+      AND f.status = :status
+    """)
+    org.springframework.data.domain.Page<StoredFile> findFolderFiles(
+            @Param("accountId") UUID accountId,
+            @Param("folderId") UUID folderId,
+            @Param("status") FileStatus status,
+            org.springframework.data.domain.Pageable pageable
+    );
+
+    @Query("""
+    SELECT COUNT(f) FROM StoredFile f
+    WHERE f.folder.id IN :folderIds AND f.status = :status
+    """)
+    long countByFolderIdInAndStatus(
+            @Param("folderIds") Collection<UUID> folderIds,
+            @Param("status") FileStatus status
+    );
+
+    @Query("""
+    SELECT COALESCE(SUM(f.fileSize), 0) FROM StoredFile f
+    WHERE f.folder.id IN :folderIds AND f.status = :status
+    """)
+    long sumSizeByFolderIdInAndStatus(
+            @Param("folderIds") Collection<UUID> folderIds,
+            @Param("status") FileStatus status
+    );
 }

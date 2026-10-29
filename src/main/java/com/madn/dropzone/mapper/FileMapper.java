@@ -27,13 +27,44 @@ public class FileMapper {
 
         fileDto.setFileId(file.getId());
         fileDto.setFileName(file.getFileName());
-        fileDto.setFileSize((file.getFileSize()/1024) + "MB");
+        fileDto.setFileSize((file.getFileSize() / 1024) + "MB");
+        fileDto.setSizeBytes(file.getFileSize());
         fileDto.setStatus(file.getStatus());
         fileDto.setContentType(file.getContentType());
         fileDto.setUploaded_at(file.getUploadedAt());
 
         return fileDto;
+    }
 
+    public static String formatFileSize(long bytes) {
+        if (bytes < 1024) {
+            return bytes + " B";
+        } else if (bytes < 1024 * 1024) {
+            return String.format(java.util.Locale.US, "%.1f KB", bytes / 1024.0);
+        } else if (bytes < 1024 * 1024 * 1024) {
+            return String.format(java.util.Locale.US, "%.2f MB", bytes / (1024.0 * 1024.0));
+        } else {
+            return String.format(java.util.Locale.US, "%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0));
+        }
+    }
+
+    public static com.madn.dropzone.dto.response.FileResponse fileToFileResponse(StoredFile file) {
+        if (file == null) {
+            return null;
+        }
+        long size = file.getFileSize() != null ? file.getFileSize() : 0L;
+        return com.madn.dropzone.dto.response.FileResponse.builder()
+                .id(file.getId())
+                .name(file.getFileName())
+                .sizeBytes(size)
+                .formattedSize(formatFileSize(size))
+                .contentType(file.getContentType())
+                .checksum(file.getChecksum())
+                .folderId(file.getFolder() != null ? file.getFolder().getId() : null)
+                .status(file.getStatus())
+                .uploadedAt(file.getUploadedAt())
+                .updatedAt(file.getUpdatedAt())
+                .build();
     }
 
     public static StoredFile StoredFileCopy(

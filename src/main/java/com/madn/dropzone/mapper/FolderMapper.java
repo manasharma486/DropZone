@@ -29,4 +29,17 @@ public class FolderMapper {
         }
         return dto;
     }
+
+    public static com.madn.dropzone.dto.response.FolderResponse folderToFolderResponse(StoredFolder storedFolder) {
+        if (storedFolder == null) {
+            return null;
+        }
+        return com.madn.dropzone.dto.response.FolderResponse.builder()
+                .id(storedFolder.getId())
+                .name(storedFolder.getName())
+                .parentFolderId(storedFolder.getParentFolder() != null ? storedFolder.getParentFolder().getId() : null)
+                .createdAt(storedFolder.getCreatedAt())
+                .updatedAt(storedFolder.getUpdatedAt())
+                .build();
+    }
 }

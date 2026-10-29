@@ -1,5 +1,6 @@
 package com.madn.dropzone.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -8,36 +9,40 @@ import lombok.Setter;
 
 import java.util.UUID;
 
-@AllArgsConstructor
-@NoArgsConstructor
 @Getter
 @Setter
 @Builder
+@AllArgsConstructor
+@NoArgsConstructor
 public class StoredFolderDto {
-    private UUID id;
+
+    private UUID folderId;
     private String folderName;
     private UUID storageAccountId;
     private FileFolderDto fileFolderDto;
     private UUID parentFolder;
 
-    public UUID getFolderId() {
-        return this.id;
+    @JsonProperty("id")
+    public UUID getId() {
+        return folderId;
     }
 
-    public void setFolderId(UUID folderId) {
-        this.id = folderId;
+    public void setId(UUID id) {
+        this.folderId = id;
     }
 
+    @JsonProperty("name")
     public String getName() {
-        return this.folderName;
+        return folderName;
     }
 
     public void setName(String name) {
         this.folderName = name;
     }
 
+    @JsonProperty("parentFolderId")
     public UUID getParentFolderId() {
-        return this.parentFolder;
+        return parentFolder;
     }
 
     public void setParentFolderId(UUID parentFolderId) {

@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#FBFBF9">
+  <meta name="description" content="Dropzone — your files, in their place.">
+  <title>Dropzone — Your space for files</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/app.css?v=2.0.2">
+</head>
+<body>
+  <!-- Toast notification region -->
+  <div id="toast-region" class="toast-region" aria-live="polite"></div>
+
+  <!-- ═══════════════════════════════════════════
+       AUTH VIEW
+       ═══════════════════════════════════════════ -->
+  <main id="auth-view" class="auth-view" hidden>
+    <section class="auth-brand">
+      <a class="brand-lockup" href="/">
+        <img src="/assets/dropzone-mark.svg" alt="" class="brand-mark">
+        <span>dropzone<span class="brand-period">.</span></span>
+      </a>
+      <div class="auth-manifesto">
+        <div class="manifesto-graphic" aria-hidden="true">
+          <span></span><span></span><span></span><span></span>
+        </div>
+        <p class="micro-label">A place for everything</p>
+        <h1>Your files.<br>In their place.</h1>
+        <p class="auth-copy">Keep your work together, find it fast, and stay in control.</p>
+      </div>
+      <p class="auth-foot">Private by default <span>·</span> Yours to organize</p>
+    </section>
+    <section class="auth-panel">
+      <div class="auth-card">
+        <p class="micro-label" id="auth-kicker">WELCOME BACK</p>
+        <h2 id="auth-title">Sign in to Dropzone</h2>
+        <p class="auth-subtitle" id="auth-subtitle">Pick up right where you left off.</p>
+        <form id="auth-form" class="form-stack" novalidate>
+          <label id="name-field" hidden>
+            Name
+            <input name="name" autocomplete="name" minlength="2" maxlength="100" placeholder="Your name">
+          </label>
+          <label>
+            Email address
+            <input name="email" type="email" autocomplete="email" required placeholder="name@domain.com">
+          </label>
+          <label>
+            Password
+            <input name="password" type="password" autocomplete="current-password" required minlength="8" placeholder="At least 8 characters">
+          </label>
+          <button class="btn btn-primary auth-submit" type="submit">
+            <span id="auth-submit-label">Sign in</span>
+            <span aria-hidden="true">→</span>
+          </button>
+        </form>
+        <p class="auth-switch">
+          <span id="auth-switch-copy">New to Dropzone?</span>
+          <button id="auth-switch" class="text-link" type="button">Create an account</button>
+        </p>
+        <p class="form-error" id="auth-error" role="alert"></p>
+      </div>
+    </section>
+  </main>
+
+  <!-- ═══════════════════════════════════════════
+       APP SHELL
+       ═══════════════════════════════════════════ -->
+  <div id="app" class="app-shell" hidden>
+
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <a class="brand-lockup sidebar-brand" href="#drive" aria-label="Dropzone home">
+        <img src="/assets/dropzone-mark.svg" alt="" class="brand-mark">
+        <span>dropzone<span class="brand-period">.</span></span>
+      </a>
+
+      <button class="workspace-switch" id="workspace-switch" type="button">
+        <span class="workspace-avatar" id="workspace-avatar">D</span>
+        <span class="workspace-copy">
+          <strong id="workspace-name">My Dropzone</strong>
+          <small>Personal space</small>
+        </span>
+        <span class="workspace-chevron">⌄</span>
+      </button>
+
+      <nav class="primary-nav" aria-label="Main navigation">
+        <p class="nav-label">Workspace</p>
+        <button class="nav-item active" data-view="drive">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="14" height="14" rx="2"/><path d="M3 8h14"/></svg>
+          <span>My files</span>
+          <kbd>⌘ 1</kbd>
+        </button>
+        <button class="nav-item" data-view="recent">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="7"/><path d="M10 6v4l3 2"/></svg>
+          <span>Recent</span>
+        </button>
+        <div class="nav-divider"></div>
+        <p class="nav-label">Library</p>
+        <button class="nav-item" data-view="trash">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 6h10M8 6V4h4v2M6 6l1 10h6l1-10"/></svg>
+          <span>Trash</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-bottom">
+        <div class="storage-meter">
+          <div class="storage-label">
+            <span id="storage-label-title">Storage</span>
+            <span id="storage-text">—</span>
+          </div>
+          <div class="storage-bar" aria-hidden="true">
+            <div class="storage-bar-fill" id="storage-bar-fill" style="width: 0%"></div>
+          </div>
+          <p class="storage-caption" id="storage-caption">Loading quota…</p>
+        </div>
+        <button class="profile-button" id="profile-button" type="button">
+          <span class="profile-avatar" id="profile-avatar">D</span>
+          <span class="profile-info">
+            <strong id="profile-name">Your account</strong>
+            <small id="profile-email"></small>
+          </span>
+          <span class="profile-dots">···</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Mobile overlay -->
+    <div class="mobile-scrim" id="mobile-scrim"></div>
+
+    <!-- Main column -->
+    <section class="main-column">
+      <header class="topbar">
+        <button class="mobile-menu" id="mobile-menu" type="button" aria-label="Open navigation">
+          <span></span><span></span><span></span>
+        </button>
+        <div class="top-search">
+          <svg class="search-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="9" r="5.5"/><path d="M13 13l3.5 3.5"/></svg>
+          <input id="search-input" type="search" placeholder="Search your files" aria-label="Search your files">
+          <kbd>⌘ K</kbd>
+        </div>
+        <div class="topbar-right">
+          <span class="private-badge"><i></i> Private space</span>
+        </div>
+      </header>
+
+      <main class="content" id="content">
+        <!-- Page heading -->
+        <div class="page-heading">
+          <div>
+            <p class="micro-label" id="page-context">Your workspace</p>
+            <h1 id="page-title">My files</h1>
+            <div class="breadcrumbs" id="breadcrumbs">
+              <span>Everything you've stored, together.</span>
+            </div>
+          </div>
+          <div class="heading-actions" id="heading-actions">
+            <button class="btn btn-secondary" id="new-folder" type="button">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h4l2 2h6v7H2z"/></svg>
+              New folder
+            </button>
+            <button class="btn btn-primary" id="upload-trigger" type="button">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 12V3M4 6l4-4 4 4"/><path d="M2 12v2h12v-2"/></svg>
+              Upload files
+            </button>
+            <input id="file-input" type="file" multiple hidden>
+          </div>
+          <div class="bin-actions" id="bin-actions" hidden>
+            <button class="btn btn-secondary" id="restore-all" type="button">Restore all</button>
+            <button class="btn btn-danger" id="empty-bin" type="button">Empty trash</button>
+          </div>
+        </div>
+
+        <!-- Overview strip -->
+        <section class="overview-strip" aria-label="File overview">
+          <div class="overview-cell">
+            <span class="overview-label">Files in view</span>
+            <strong id="file-count">—</strong>
+            <span class="overview-note">Current folder</span>
+          </div>
+          <div class="overview-cell">
+            <span class="overview-label">Folders</span>
+            <strong id="folder-count">—</strong>
+            <span class="overview-note">Ready to explore</span>
+          </div>
+          <div class="overview-cell overview-feature">
+            <div>
+              <span class="overview-label">Total size</span>
+              <strong id="overview-total">—</strong>
+            </div>
+            <div class="file-constellation" aria-hidden="true">
+              <i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+            </div>
+          </div>
+        </section>
+
+        <!-- File section -->
+        <section class="file-section" aria-label="Files and folders">
+          <div class="section-toolbar" id="section-toolbar">
+            <div class="view-tabs" role="tablist" aria-label="File filter">
+              <button class="view-tab active" data-filter="all" role="tab">All files <span id="all-count">0</span></button>
+              <button class="view-tab" data-filter="folders" role="tab">Folders</button>
+              <button class="view-tab" data-filter="documents" role="tab">Documents</button>
+              <button class="view-tab" data-filter="images" role="tab">Images</button>
+            </div>
+            <div class="toolbar-actions">
+              <label class="sort-control">
+                Sort
+                <select id="sort-select" aria-label="Sort files">
+                  <option value="name">Name</option>
+                  <option value="uploadedAt">Date added</option>
+                  <option value="size">File size</option>
+                </select>
+              </label>
+              <button class="icon-btn" id="layout-toggle" aria-label="Switch file layout" title="Switch layout">
+                <svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Drop target -->
+          <div class="drop-target" id="drop-target">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V3M7 8l5-5 5 5"/><path d="M3 15v4a2 2 0 002 2h14a2 2 0 002-2v-4"/></svg>
+            <span>Drop files here to upload</span>
+          </div>
+
+          <!-- File list -->
+          <div class="file-list" id="file-list">
+            <div class="list-header">
+              <span class="col-name">Name</span>
+              <span class="col-kind">Type</span>
+              <span class="col-size">Size</span>
+              <span class="col-date">Date added</span>
+              <span class="col-menu"></span>
+            </div>
+            <div id="file-rows"></div>
+          </div>
+
+          <!-- Pagination -->
+          <nav class="pagination" id="pagination" aria-label="File pages" hidden>
+            <button class="btn btn-secondary btn-sm" id="page-previous" type="button">← Previous</button>
+            <span id="page-status" aria-live="polite"></span>
+            <button class="btn btn-secondary btn-sm" id="page-next" type="button">Next →</button>
+          </nav>
+
+          <!-- Empty state -->
+          <div class="empty-state" id="empty-state" hidden>
+            <div class="empty-graphic" aria-hidden="true">
+              <svg viewBox="0 0 80 80" fill="none">
+                <rect x="10" y="18" width="28" height="36" rx="4" stroke="#FDC800" stroke-width="2.5" transform="rotate(-8 10 18)"/>
+                <rect x="32" y="14" width="28" height="36" rx="4" stroke="#FDC800" stroke-width="2.5" transform="rotate(6 32 14)"/>
+                <circle cx="50" cy="30" r="8" fill="#FDC800"/>
+                <path d="M47 30h6M50 27v6" stroke="#1C293C" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <h2 id="empty-title">A little room to begin.</h2>
+            <p id="empty-copy">Drop in a file or create a folder. Your space is ready.</p>
+            <button class="btn btn-secondary" id="empty-create" type="button">Create your first folder</button>
+          </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="page-footer">
+          <span id="footer-count">0 items</span>
+          <span>Files stay yours <b>·</b> <a href="https://github.com" target="_blank" rel="noreferrer">Made for a little more order</a></span>
+        </footer>
+      </main>
+    </section>
+
+    <!-- Context menu -->
+    <div class="context-menu" id="context-menu" hidden></div>
+
+    <!-- Modal -->
+    <dialog class="modal" id="action-modal">
+      <form method="dialog" class="modal-content" id="modal-form">
+        <button class="modal-close" value="cancel" type="button" aria-label="Close">×</button>
+        <p class="micro-label" id="modal-eyebrow">NEW FOLDER</p>
+        <h2 id="modal-title">Give this folder a name</h2>
+        <p class="modal-description" id="modal-description">Keep related files together.</p>
+        <div id="modal-fields"></div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" value="cancel" type="button">Cancel</button>
+          <button class="btn btn-primary" id="modal-submit" value="default" type="submit">Create folder</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Upload progress -->
+    <div class="upload-progress" id="upload-progress" hidden>
+      <span class="upload-spinner"></span>
+      <span id="upload-progress-label">Uploading files…</span>
+      <button id="upload-dismiss" type="button" aria-label="Dismiss">×</button>
+    </div>
+  </div>
+
+  <script src="/assets/app.js?v=2.0.9" defer></script>
+</body>
+</html>

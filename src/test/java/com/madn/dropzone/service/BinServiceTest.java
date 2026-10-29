@@ -44,6 +44,9 @@ class BinServiceTest {
     @Mock
     private StorageService storageService;
 
+    @Mock
+    private com.madn.dropzone.repository.PhysicalStorageObjectRepository physicalStorageObjectRepository;
+
     @InjectMocks
     private BinService binService;
 
@@ -246,20 +249,16 @@ class BinServiceTest {
 
             when(storageAccountRepository.findByUserId(userId)).thenReturn(Optional.of(storageAccount));
             when(fileRepository.getStoredFileByIdAndUserId(userId, fileId)).thenReturn(Optional.of(file));
-            // No other files share this checksum
-            when(fileRepository.countFilesWithStatuses(eq("checksum-abc"), any())).thenReturn(0L);
-
             BinFileDto dto = new BinFileDto(List.of(fileId));
 
             String result = binService.deleteFiles(userId, dto);
 
             assertThat(result).isEqualTo("Files deleted successfully!");
-            assertThat(file.getStatus()).isEqualTo(FileStatus.TRASHED);
             assertThat(storageAccount.getUsedBytes()).isEqualTo(3000L); // 5000 - 2000
 
-            verify(fileRepository).saveAllAndFlush(List.of(file));
-            verify(storageService).deleteFromStorage("storage-key-1");
-            verify(fileRepository).removeStoredFileByChecksum("checksum-abc");
+            verify(physicalStorageObjectRepository).decrementReferenceCount("checksum-abc");
+            verify(storageService, never()).deleteFromStorage(any());
+            verify(fileRepository).delete(file);
             verify(storageAccountRepository).save(storageAccount);
         }
 
@@ -276,20 +275,16 @@ class BinServiceTest {
 
             when(storageAccountRepository.findByUserId(userId)).thenReturn(Optional.of(storageAccount));
             when(fileRepository.getStoredFileByIdAndUserId(userId, fileId)).thenReturn(Optional.of(file));
-            // Another user still references this file
-            when(fileRepository.countFilesWithStatuses(eq("checksum-shared"), any())).thenReturn(1L);
-
             BinFileDto dto = new BinFileDto(List.of(fileId));
 
             String result = binService.deleteFiles(userId, dto);
 
             assertThat(result).isEqualTo("Files deleted successfully!");
-            assertThat(file.getStatus()).isEqualTo(FileStatus.TRASHED);
             assertThat(storageAccount.getUsedBytes()).isEqualTo(4000L); // 5000 - 1000
 
-            verify(fileRepository).saveAllAndFlush(List.of(file));
+            verify(physicalStorageObjectRepository).decrementReferenceCount("checksum-shared");
             verify(storageService, never()).deleteFromStorage(any());
-            verify(fileRepository, never()).removeStoredFileByChecksum(any());
+            verify(fileRepository).delete(file);
             verify(storageAccountRepository).save(storageAccount);
         }
 
@@ -352,8 +347,8 @@ class BinServiceTest {
         }
 
         @Test
-        @DisplayName("Throw DataIntegrityViolationException when total bytes to remove exceeds used bytes")
-        void deleteFiles_NegativeUsage_ThrowsException() {
+        @DisplayName("Safely clamp storage usage to zero when total bytes to remove exceeds used bytes")
+        void deleteFiles_NegativeUsage_ClampsToZero() {
             UUID fileId = UUID.randomUUID();
             StoredFile file = new StoredFile();
             file.setId(fileId);
@@ -365,9 +360,10 @@ class BinServiceTest {
 
             BinFileDto dto = new BinFileDto(List.of(fileId));
 
-            assertThatThrownBy(() -> binService.deleteFiles(userId, dto))
-                    .isInstanceOf(DataIntegrityViolationException.class)
-                    .hasMessageContaining("Storage usage cannot be negative");
+            String result = binService.deleteFiles(userId, dto);
+
+            assertThat(result).isEqualTo("Files deleted successfully!");
+            assertThat(storageAccount.getUsedBytes()).isEqualTo(0L);
         }
     }
 
@@ -388,16 +384,15 @@ class BinServiceTest {
             when(storageAccountRepository.findByUserId(userId)).thenReturn(Optional.of(storageAccount));
             when(fileRepository.getStoredFileFromStatus(userId, FileStatus.DELETED, ""))
                     .thenReturn(List.of(file1));
-            when(fileRepository.countFilesWithStatuses(eq("checksum-1"), any())).thenReturn(0L);
 
             String result = binService.deleteAllFiles(userId);
 
             assertThat(result).isEqualTo("All files deleted successfully!");
-            assertThat(file1.getStatus()).isEqualTo(FileStatus.TRASHED);
             assertThat(storageAccount.getUsedBytes()).isEqualTo(3000L);
 
-            verify(storageService).deleteFromStorage("key-1");
-            verify(fileRepository).removeStoredFileByChecksum("checksum-1");
+            verify(physicalStorageObjectRepository).decrementReferenceCount("checksum-1");
+            verify(storageService, never()).deleteFromStorage(any());
+            verify(fileRepository).delete(file1);
             verify(storageAccountRepository).save(storageAccount);
         }
 
